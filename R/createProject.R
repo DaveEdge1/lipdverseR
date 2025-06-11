@@ -160,7 +160,7 @@ write.table(x = failed,file = file.path(webDirectory,project,version,"failedLipd
 directoryMD5 <- function(thisDir,pattern = "*.lpd"){
 td <- getwd()
 setwd(thisDir)
-zip(zipfile = file.path(thisDir,"test.zip"),files = list.files(thisDir,pattern= pattern))
+zip(zipfile = file.path(thisDir,"test.zip"),files = list.files(thisDir,pattern= pattern),flags = "-q")
 thisMD5 <- tools::md5sum("test.zip")
 unlink("test.zip")
 setwd(td)

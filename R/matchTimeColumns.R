@@ -1,5 +1,24 @@
-assignPrimaryTimeColumns <- function(L){
+assignPrimaryTimeColumns <- function(L,update.changelog = TRUE){
   ts <- as.lipdTsTibble(L)
+  if(all(is.null(ts$paleoData_isPrimary))){
+    ts$paleoData_isPrimary <- FALSE
+  }else{
+    ts$paleoData_isPrimary <- as.logical(ts$paleoData_isPrimary)
+  }
+
+  if(all(is.null(ts$paleoData_primaryAgeColumn))){
+    ts$paleoData_primaryAgeColumn <- FALSE
+  }else{
+    ts$paleoData_primaryAgeColumn <- as.logical(ts$paleoData_primaryAgeColumn)
+  }
+
+  #if we have them, then we're done.
+  if(any(purrr::map_lgl(ts$paleoData_primaryAgeColumn,isTRUE)) & any(purrr::map_lgl(ts$paleoData_isPrimary,isTRUE))){
+    return(L)
+  }
+
+
+
 
   #how many measurement tables:
   at <- unique(ts$tableNumber)
@@ -33,6 +52,7 @@ assignPrimaryTimeColumns <- function(L){
 
       #check for primary age column
       if(!all(is.null(tt$paleoData_primaryAgeColumn))){
+        tt$paleoData_primaryAgeColumn <- as.logical(tt$paleoData_primaryAgeColumn)
         tt$paleoData_primaryAgeColumn[is.na(tt$paleoData_primaryAgeColumn)] <- FALSE
         if(any(tt$paleoData_primaryAgeColumn)){
           ti <- which(tt$paleoData_primaryAgeColumn)
@@ -43,7 +63,7 @@ assignPrimaryTimeColumns <- function(L){
         tt$paleoData_primaryAgeColumn <- FALSE #create a primary age column
 
         if(any(tt$paleoData_isPrimary)){
-
+          tt$paleoData_isPrimary <- as.logical(tt$paleoData_isPrimary)
           agei <- which(tt$paleoData_isPrimary & tolower(tt$paleoData_variableName) == "age")
           if(length(agei) >= 1){
             tt$paleoData_primaryAgeColumn[agei] <- TRUE
@@ -86,8 +106,10 @@ assignPrimaryTimeColumns <- function(L){
 
   Lnew <- as.lipd(tsn)
 
-  cl <- createChangelog(L,Lnew)
-  Lnew <- updateChangelog(Lnew,changelog = cl,notes = "added isPrimary, primaryAgeColumn, and hasTimeTsid")
+  if(update.changelog){
+    cl <- createChangelog(L,Lnew)
+    Lnew <- updateChangelog(Lnew,changelog = cl,notes = "added isPrimary, primaryAgeColumn, and hasTimeTsid")
+  }
   return(Lnew)
 
 }

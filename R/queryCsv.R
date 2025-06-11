@@ -179,12 +179,12 @@ createQueryCsv <- function(D){
 #' @export
 updateQueryCsv <- function(D,append = TRUE){
   newQCSV <- createQueryCsv(D) %>% dplyr::mutate(dplyr::across(dplyr::everything(), as.character))
+  if(append){#update the old with the new
 
   #get the old one
   oldQCSV <- readr::read_csv(file = "~/Dropbox/lipdverse/html/lipdverse/lipdverseQuery.csv") %>%
     dplyr::mutate(dplyr::across(dplyr::everything(), as.character))
 
-  if(append){#update the old with the new
   #remove updated columns
   up <- oldQCSV %>%
     dplyr::filter(!paleoData_TSid %in% newQCSV$paleoData_TSid) %>%
@@ -200,6 +200,8 @@ updateQueryCsv <- function(D,append = TRUE){
       zipfile = "~/Dropbox/lipdverse/html/lipdverse/lipdverseQuery.zip",extras = '-j')
   tools::md5sum("~/Dropbox/lipdverse/html/lipdverse/lipdverseQuery.zip") %>%
     readr::write_file("~/Dropbox/lipdverse/html/lipdverse/lipdverseQuery.md5")
+
+  system("rsync -rvauz --delete /Users/nicholas/Dropbox/lipdverse/html/lipdverse/ npm4@linux.cefns.nau.edu:/www/cefns.nau.edu/seses/lipdverse/lipdverse")
 
   updateSqlQuery(queryTable = up)
 }
@@ -236,7 +238,8 @@ updateSqlQuery <- function(queryTable){
                      maxAge = min(maxAge,na.rm = TRUE),
                      geo_latitude = mean(as.numeric(geo_latitude),na.rm = TRUE),
                      geo_longitude = mean(as.numeric(geo_longitude),na.rm = TRUE),
-                     paleoData_proxy = datasetIDcollapse(paleoData_proxy))
+                     paleoData_proxy = datasetIDcollapse(paleoData_proxy),
+                     paleoData_units = datasetIDcollapse(paleoData_units))
 
 
 
@@ -278,7 +281,7 @@ updateSqlQuery <- function(queryTable){
 
   #replace dataSet queryTable
   #connection info
-  conInf <- readr::read_tsv("sql.secret",col_names = FALSE)
+  conInf <- readr::read_tsv("sql.secret",col_names = FALSE,col_types = "c")
 
   mysqlconnection = RMySQL::dbConnect(RMySQL::MySQL(),
                                       dbname='lipdverse',
@@ -288,7 +291,7 @@ updateSqlQuery <- function(queryTable){
                                       password=conInf$X1[[2]])
 
 
-  dbWriteTable(mysqlconnection, "dataSetQuery", df1, overwrite=TRUE)
+  RMySQL::dbWriteTable(mysqlconnection, "dataSetQuery", df1, overwrite=TRUE)
 
 
 }

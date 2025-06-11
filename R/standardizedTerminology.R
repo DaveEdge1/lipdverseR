@@ -184,6 +184,7 @@ updateVocabWebsites <- function(){
   #serialize standard tables and save for upload
   names(standardTables)
   saveRDS(standardTables,file = file.path("~/Dropbox/lipdverse/html/lipdverse/standardTables.RDS"))
+  system('rsync -v /Users/nicholas/Dropbox/lipdverse/html/lipdverse/* npm4@linux.cefns.nau.edu:/www/cefns.nau.edu/seses/lipdverse/lipdverse')
 
 }
 

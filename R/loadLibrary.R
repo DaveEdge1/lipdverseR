@@ -22,5 +22,23 @@ loadLipdverseDatabase <- function(path = "~/Dropbox/lipdverse/database/"){
     D <- lipdR::readLipd(path,parallel = TRUE)
     saveRDS(D,file = rds)
   }
+
+  #basic error checking for lipdverse
+  dsid <- purrr::map_chr(D,"datasetId")
+  if(any(duplicated(dsid))){
+    warning("DUPLICATED datasetIds!")
+  }
+
+  dsn <- purrr::map_chr(D,"dataSetName")
+  if(any(duplicated(dsn))){
+    warning("DUPLICATED dataSetNames!")
+  }
+
+  #check for standard terms?
+
+  #check for validLipd files?
+
+
+
   return(D)
 }

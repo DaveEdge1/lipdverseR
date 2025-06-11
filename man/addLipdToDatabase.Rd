@@ -7,7 +7,10 @@
 addLipdToDatabase(
   L,
   dbPath = "/Users/nicholas/Dropbox/lipdverse/database/",
-  standardize = FALSE
+  dbRef = NA,
+  standardize = FALSE,
+  parallelize = FALSE,
+  checkValid = TRUE
 )
 }
 \arguments{

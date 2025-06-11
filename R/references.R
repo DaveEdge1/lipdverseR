@@ -116,7 +116,8 @@ updateGoogleReferencesFromLipd <- function(allRefTib){
   gs <- read_sheet_retry("1MPLsg7OLMMm5L2UV829OaXbK5B9zx6ng9cXWtwTZwgg")
 
 
-  newRefs <- select(allRefTib,citekey,everything(),-citation,-datasetId,-dataSetName) %>%
+
+  newRefs <- select(allRefTib,citekey,everything(),-any_of(c("citation","datasetId","dataSetName"))) %>%
     distinct() %>%
     filter(!startsWith(citekey,prefix = "author")) %>% #no missing authors
     filter(is.finite(as.numeric(year))) %>% #no missing years

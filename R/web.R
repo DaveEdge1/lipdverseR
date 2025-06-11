@@ -132,13 +132,13 @@ createSidebarHtml <- function(L,webdir = "/Volumes/data/Dropbox/lipdverse/html")
 
   sidebarTitle <- glue::glue("{dsn} - v{vers}")
   dsidstr <- paste("Dataset Id:",dsid)
-  dsPath <- glue("https://lipdverse.org/data/{dsid}/{vers_}/")
-  lpdPath <- glue("{dsPath}/{dsn}.lpd")
-  lpdPathEns <- glue("{dsPath}/{dsn}-ensemble.lpd")
-  jsonPath <- glue("{dsPath}/{dsn}.jsonld")
-  csvName <- glue("{dsPath}/{dsn}.csv")
-  csvNameChron <- glue("{dsPath}/{dsn}-chron.csv")
-  lipdverseLpdPath <- glue("https://lipdverse.org/data/{dsid}/{vers_}/{dsn}.lpd")
+  dsPath <- glue::glue("https://lipdverse.org/data/{dsid}/{vers_}/")
+  lpdPath <- glue::glue("{dsPath}/{dsn}.lpd")
+  lpdPathEns <- glue::glue("{dsPath}/{dsn}-ensemble.lpd")
+  jsonPath <- glue::glue("{dsPath}/{dsn}.jsonld")
+  csvName <- glue::glue("{dsPath}/{dsn}.csv")
+  csvNameChron <- glue::glue("{dsPath}/{dsn}-chron.csv")
+  lipdverseLpdPath <- glue::glue("https://lipdverse.org/data/{dsid}/{vers_}/{dsn}.lpd")
 
   #add copy/paste code block
 
@@ -188,7 +188,7 @@ createSidebarHtml <- function(L,webdir = "/Volumes/data/Dropbox/lipdverse/html")
     str_c(glue('<pre><code>L <- lipdR::readLipd("{lipdverseLpdPath}")</code></pre>')) %>%
     str_c("\n") %>%
     str_c("            \n") %>%
-  str_c(glue('<p style="margin-left: 0px"><a href="http://lipd.net/playground?source={lipdverseLpdPath}">Edit LiPD file</a>',sep = "\n")) %>%
+    str_c(glue('<p style="margin-left: 0px"><a href="http://lipd.net/playground?source={lipdverseLpdPath}">Edit LiPD file</a>',sep = "\n")) %>%
     str_c("\n") %>%
     str_c("            \n") %>%
     str_c(glue('<p style="margin-left: 0px"><a href="{csvName}">Download PaleoData only (csv)</a>',sep = "\n")) %>%
@@ -820,7 +820,7 @@ createWebComponents <- function(L,webdir = "/Volumes/data/Dropbox/lipdverse/html
 createDataWebPage <- function(L,webdir = "/Volumes/data/Dropbox/lipdverse/html"){
   dsid <- L$datasetId
   dsn <- L$dataSetName
-  vers <- sapply(L$changelog,"[[","version") %>% as.numeric_version() %>% max() %>% as.character()
+  vers <- as.character(L$datasetVersion)
   vers_ <- str_replace_all(vers,"[.]","_")
 
   dsPath <- glue("https://lipdverse.org/data/{dsid}/{vers_}/")
@@ -846,6 +846,9 @@ createDataWebPage <- function(L,webdir = "/Volumes/data/Dropbox/lipdverse/html")
     str_replace("paleoDataGraphsUrlHere",paleoUrl) %>%
     str_replace("chronDataGraphsUrlHere",chronUrl)
 
+  if(!dir.exists(file.path(webdir,"data",dsid,vers_))){
+    dir.create(file.path(webdir,"data",dsid,vers_))
+  }
   readr::write_file(template,file = file.path(webdir,"data",dsid,vers_,paste0(dsn,".html")))
 
   #remove ensembles if present
@@ -872,7 +875,7 @@ createDataWebPage <- function(L,webdir = "/Volumes/data/Dropbox/lipdverse/html")
 
   #write changelog html
   clpath <- file.path(webdir,'data',dsid,vers_,'changelog.md')
-  clmd <- createMarkdownChangelog(L)
+  clmd <- lipdR::createMarkdownChangelog(L)
   readr::write_file(clmd,file = clpath)
   rmarkdown::render(clpath)
 
@@ -895,7 +898,7 @@ createDataWebPage <- function(L,webdir = "/Volumes/data/Dropbox/lipdverse/html")
 updateDataWebPageForCompilation <- function(L,webdir = "/Volumes/data/Dropbox/lipdverse/html"){
   dsid <- L$datasetId
   dsn <- L$dataSetName
-  vers <- sapply(L$changelog,"[[","version") %>% as.numeric_version() %>% max() %>% as.character()
+  vers <- L$datasetVersion
   vers_ <- str_replace_all(vers,"[.]","_")
 
   if(!file.exists(file.path(webdir,"data",dsid,"index.html"))){
@@ -992,8 +995,8 @@ getInventory <- function(lipdDir,googEmail){
   tries <- 0
   while(TRUE){
     smatch <- try(R.utils::withTimeout({googledrive::drive_find(pattern = invName,n_max = 1)},
-                                      timeout = 15,
-                                      onTimeout = "error"),silent = TRUE)
+                                       timeout = 15,
+                                       onTimeout = "error"),silent = TRUE)
 
     if(is(smatch,"try-error")){
       tries <- tries + 1

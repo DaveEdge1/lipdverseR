@@ -6,11 +6,9 @@
 #' @return
 #' @export
 createDatabaseReference <- function(D){
-  lts <- lipdR::extractTs(D)
-  did <- lipdR::pullTsVariable(lts,"datasetId",strict.search = TRUE)
-  dsn <- lipdR::pullTsVariable(lts,"dataSetName",strict.search = TRUE)
-  ref <- tibble::tibble(datasetId = did, dataSetName = dsn) %>%
-    dplyr::distinct()
+  did <- purrr::map_chr(D,"datasetId")
+  dsn <- purrr::map_chr(D,"dataSetName")
+  ref <- tibble::tibble(datasetId = did, dataSetName = dsn)
 
   if(any(duplicated(ref$datasetId))){
     id <- which(duplicated(ref$datasetId))
@@ -33,7 +31,10 @@ createDatabaseReference <- function(D){
 #' @export
 addLipdToDatabase <- function(L,
                               dbPath = "/Users/nicholas/Dropbox/lipdverse/database/",
-                              standardize = FALSE,parallelize = FALSE){
+                              dbRef = NA,
+                              standardize = FALSE,
+                              parallelize = FALSE,
+                              checkValid = TRUE){
 
 
   if(currentlyUpdating()){
@@ -41,19 +42,23 @@ addLipdToDatabase <- function(L,
   }
 
   #test for valid LiPD file
-  isValid <- lipdR::validLipd(L)
+  if(checkValid){
+    isValid <- lipdR::validLipd(L)
 
-  if(!isValid){
-    stop("The LiPD file is not valid. Run lipdR::validLipd() to diagnose the problems")
+    if(!isValid){
+      stop("The LiPD file is not valid. Run lipdR::validLipd() to diagnose the problems")
+    }
+
   }
-
-  if(exists("databaseRef",envir = .GlobalEnv)){
-    databaseRef <- get("databaseRef",envir = .GlobalEnv)
+  if(all(is.na(dbRef))){
+    if(exists("databaseRef",envir = .GlobalEnv)){
+      databaseRef <- get("databaseRef",envir = .GlobalEnv)
+    }else{
+      databaseRef <- createDatabaseReference(lipdR::readLipd(dbPath,parallel = parallelize))
+      assign("databaseRef",value = databaseRef,envir = .GlobalEnv)
+    }
   }else{
-    future::plan(future::multisession,workers = 16)
-    databaseRef <- createDatabaseReference(lipdR::readLipd(dbPath,parallel = parallelize))
-    assign("databaseRef",value = databaseRef,envir = .GlobalEnv)
-
+    databaseRef <- dbRef
   }
 
   #check for needed variables

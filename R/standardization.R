@@ -1,11 +1,236 @@
+convert_spaces_to_na <- function(x) {
+  if(is.null(x)){
+    return(NULL)
+  }
+  ifelse(trimws(x) == "", NA, x)
+}
+
+hasStandardizedVocabulary <- function(L, standardTables){
+  tts <- extractTs(L) |> ts2tibble()
+
+  toStandardize <- c("paleoData_variableName",
+                     "paleoData_units",
+                     "archiveType",
+                     "paleoData_proxy",
+                     "interpretation_seasonality",
+                     "interpretation_variable")
+
+  nasAllowed <- c(FALSE,
+                  TRUE,
+                  FALSE,
+                  TRUE,
+                  TRUE,
+                  TRUE)
+
+  allTermsStandard <- TRUE
+
+  for(tti in seq_along(toStandardize)){
+    tt <- toStandardize[tti]
+
+    if(tt == "interpretation_variable"){#then we need to add in the numbers
+      ttnames <- unique(names(tts)[str_detect(names(tts), "^interpretation\\d+_variable$")])
+    }else if(tt == "interpretation_seasonality"){#then we need to add in the numbers
+      ttnames <- unique(names(tts)[str_detect(names(tts), "^interpretation\\d+_seasonality$")])
+    }else{
+      ttnames <- tt
+    }
+    toFix <- c()
+    for(ttn in ttnames){
+      if(nasAllowed[tti]){
+        toFix <- c(toFix,which(!tts[[ttn]] %in% standardTables[[tt]]$lipdName & !is.na(tts[[ttn]])))
+      }else{
+        toFix <- c(toFix,which(!tts[[ttn]] %in% standardTables[[tt]]$lipdName | is.na(tts[[ttn]])))
+      }
+    }
+    if(length(toFix) > 0){
+      allTermsStandard <- FALSE
+    }
+  }
+  return(allTermsStandard)
+}
+
+standardizeLipd <- function(L,standardTables){
+  Lo <- L
+  tts <- as.lipdTsTibble(L)
+
+  allKeys <- names(standardTables)
+  toStandardize <- c("paleoData_variableName",
+                     "paleoData_units",
+                     "archiveType",
+                     "paleoData_proxy",
+                     "interpretation_seasonality",
+                     "interpretation_variable")
+
+  nasAllowed <- c(FALSE,
+                  TRUE,
+                  FALSE,
+                  TRUE,
+                  TRUE,
+                  TRUE)
+
+  changeMade <- FALSE
+
+  for(tti in seq_along(toStandardize)){
+    tt <- toStandardize[tti]
+
+    if (tt == "paleoData_variableName"){
+      meta_keys <- c("paleoData_isAssemblage", "paleoData_datum", "paleoData_summaryStatistic", "paleoData_measurementMaterial",
+                     "paleoData_inferredMaterial", "paleoData_method", "paleoData_isPrimary")
+    }else if (tt == "paleoData_proxy"){
+      meta_keys <- c("paleoData_proxyGeneral", "paleoData_measurementMaterial")
+    }else if (tt == "paleoData_units"){
+      meta_keys <- c("paleoData_datum")
+    }else{
+      meta_keys <- NA
+    }
+
+
+
+    if(tt == "interpretation_variable"){#then we need to add in the numbers
+      ttnames <- unique(names(tts)[str_detect(names(tts), "^interpretation\\d+_variable$")])
+    }else if(tt == "interpretation_seasonality"){#then we need to add in the numbers
+      ttnames <- unique(names(tts)[str_detect(names(tts), "^interpretation\\d+_seasonality$")])
+    }else{
+      ttnames <- tt
+    }
+
+    for(ttn in ttnames){
+      if(nasAllowed[tti]){
+        #convert blanks to NAs
+        ns <- convert_spaces_to_na(tts[[ttn]])
+        if(sum(is.na(ns)) != sum(is.na(tts[[ttn]]))){
+          changeMade <- TRUE
+          tts[[ttn]] <- convert_spaces_to_na(tts[[ttn]])
+        }
+      }
+
+
+
+      if(nasAllowed[tti]){
+        toFix <- which(!tts[[ttn]] %in% standardTables[[tt]]$lipdName & !is.na(tts[[ttn]]))
+      }else{
+        toFix <- which(!tts[[ttn]] %in% standardTables[[tt]]$lipdName | is.na(tts[[ttn]]))
+      }
+
+      if(length(toFix) > 0){
+        #any synoynms?
+        for(s in 1:length(toFix)){
+          synI <- which(tolower(standardTables[[tt]]$synonym) %in% tolower(tts[[ttn]][toFix[s]]))
+          if(length(synI) > 1){#could be due to capitalization
+            synICaseSensitive <- which(standardTables[[tt]]$synonym %in% tts[[ttn]][toFix[s]])
+            if(length(synICaseSensitive) == 1){
+              synI <- synICaseSensitive
+            }else{
+              message(glue::glue("{standardTables[[tt]]$synonym[synI]}"))
+              stop("multiple synonym matches, check vocab sheets")
+            }
+          }
+          if(length(synI) == 1){
+            message(glue("{tt}: Synonym found! Replacing {tts[[ttn]][toFix[s]]} with {standardTables[[tt]]$lipdName[synI]}..."))
+            if(tt == "paleoData_variableName"){
+              if(is.null(tts$paleoData_longName[toFix[s]])){ #assign old name to long name if it doesn't exist
+                tts$paleoData_longName <- tts[[ttn]][toFix[s]]
+              }else if(is.na(tts$paleoData_longName[toFix[s]])){
+                tts$paleoData_longName <- tts[[ttn]][toFix[s]]
+              }
+            }
+
+            if(tt == "interpretation_variable"){
+              if(isTRUE(as.logical(standardTables[[tt]]$invert_direction[synI]))){#then we need to check the direction
+                iNum <- str_extract(ttn,"\\d+")
+                ttnInterp <- glue::glue("interpretation{iNum}_direction")
+
+                if(!is.null(tts[[ttnInterp]][toFix[s]])){
+
+                dirQuestion <- glue("{tt}: Check the interp direction, you might need to invert it.\n
+                             Interp direction = {tts[[ttnInterp]][toFix[s]]}...")
+
+                newDir <- askUser(dirQuestion)
+                tts[[ttnInterp]][toFix[s]] <- newDir
+                }
+              }
+            }
+
+            tts[[ttn]][toFix[s]] <- standardTables[[tt]]$lipdName[synI]
+            changeMade <- TRUE
+            if(all(!is.na(meta_keys))){#also change the corresponding data
+              for(mk in meta_keys){
+                if(!all(is.na(standardTables[[tt]][[mk]][synI]))){
+                  message(glue("{tt}: Adding synonym info to metakeys: Writing {mk} = {standardTables[[tt]][[mk]][synI]}..."))
+                  if(is.null(tts[[mk]][toFix[s]])){#create it if you need to
+                    tts[[mk]] <- NA
+                  }
+                  tts[[mk]][toFix[s]] <-  standardTables[[tt]][[mk]][synI]
+                }
+              }
+            }
+
+          }else if(length(synI) == 0){
+            if(is.null(L$datasetId)){
+              stop("There's no datasetId!")
+            }
+            beepr::beep(1)
+            question <- glue::glue("{L$dataSetName}: No synonym for {tt} - {tts[[ttn]][toFix[s]]} found.\n You might want to check out the lipdverse site: https://lipdverse.org/data/{L$datasetId} \n Now, either... \n 1) Enter a synonym now, \n 2) type 0 to keep the original, \n 3) type 1 to print out some information about the file, \n or 4) type 2 to print out the values in this column.")
+
+            response <- askUser(question)
+
+            while(TRUE){
+
+              if(response == "0"){
+                message(glue("Leaving {tt} - {tts[[ttn]][toFix[s]]} as is..."))
+                break
+              }else if(response == "1"){
+                summary(L)
+                response <- askUser(question)
+              }else if(response == "2"){
+
+                print(head(tts$paleoData_values[[toFix[s]]]))
+                response <- askUser(question)
+              }else{
+                if(response %in% standardTables[[tt]]$lipdName){
+                  tts[[ttn]][toFix[s]] <- response
+                  changeMade <- TRUE
+
+                  break
+                }else{
+                  message(glue::glue("I don't recognize as {response} as a valid term for {tts[[ttn]][toFix[s]]}."))
+                  response <- askUser(question)
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  if(changeMade){
+    L <- as.lipd(tts)
+    cl <- createChangelog(Lold = Lo,Lnew = L)
+    L <- updateChangelog(L = L,
+                         changelog = cl,
+                         notes = "Changes made as part of LiPDverse vocabulary standardization process")
+  }
+
+  nowStandard <- hasStandardizedVocabulary(L,standardTables)
+  if(changeMade & nowStandard){
+    message(glue::glue("{L$dataSetName} is now standardized"))
+  }
+  if(!nowStandard){
+    message(glue::glue("{L$dataSetName} has outstanding issues!"))
+  }
+
+  return(L)
+
+}
+
+
+
+
 #' Get Standard tables
 #'
 getStandardTables <- function(){
-  if(exists("standardTables",envir = lipdEnv)){
-    standardTables <- get("standardTables",envir = lipdEnv)
-  }else{
-    standardTables <- updateStandardTables()
-  }
+  standardTables <- readRDS(url("https://lipdverse.org/lipdverse/standardTables.RDS"),"rb")
   return(standardTables)
 }
 
@@ -141,26 +366,26 @@ checkKey <- function(lipdTS, key, keyGeneral){
   #TSvals <- tolower(TSvalsO)
   numVals <- length(TSvalsO)
 
-#standardVals0 <- unique(standardTables[[eval(keyGeneral)]][["lipdName"]])
-standardVals <- unique(standardTables[[eval(keyGeneral)]][["lipdName"]])
+  #standardVals0 <- unique(standardTables[[eval(keyGeneral)]][["lipdName"]])
+  standardVals <- unique(standardTables[[eval(keyGeneral)]][["lipdName"]])
 
-# validCheck0 <- TSvalsO %in% standardVals0 |
-#   is.na(TSvals) |
-#   is.null(TSvals)
+  # validCheck0 <- TSvalsO %in% standardVals0 |
+  #   is.na(TSvals) |
+  #   is.null(TSvals)
 
-validCheck <- TSvalsO %in% standardVals |
-              is.na(TSvalsO) |
-              is.null(TSvalsO)
+  validCheck <- TSvalsO %in% standardVals |
+    is.na(TSvalsO) |
+    is.null(TSvalsO)
 
-#capDiff <- which(validCheck != validCheck0)
+  #capDiff <- which(validCheck != validCheck0)
 
 
 
-#
-#   validCheck <- unlist(lapply(tolower(TSvals), function(x) x %in%
-#                                 tolower(unname(unlist(standardTables[[eval(keyGeneral)]]["lipdName"]))))) |
-#     unlist(lapply(tolower(TSvals), function(x) is.na(x))) |
-#     unlist(lapply(tolower(TSvals), function(x) is.null(x)))
+  #
+  #   validCheck <- unlist(lapply(tolower(TSvals), function(x) x %in%
+  #                                 tolower(unname(unlist(standardTables[[eval(keyGeneral)]]["lipdName"]))))) |
+  #     unlist(lapply(tolower(TSvals), function(x) is.na(x))) |
+  #     unlist(lapply(tolower(TSvals), function(x) is.null(x)))
 
 
   numInvalid <- sum(!validCheck)
@@ -225,7 +450,7 @@ isValidValue <- function(lipdTS, key = NA){
     keysAll <- lapply(lipdTS, function(x) names(x)[names(x) %in% possibleKeys])
 
 
-      keyGeneral <- gsub('[0-9]+', '', key)
+    keyGeneral <- gsub('[0-9]+', '', key)
 
 
     #how many of these keys exist for each record, save the max number
@@ -259,7 +484,6 @@ isValidValue <- function(lipdTS, key = NA){
 #' @export
 
 standardizeValue <- function(lipdTS, key = NA){
-
 
   standardTables <- getStandardTables()
 
@@ -297,7 +521,7 @@ standardizeValue <- function(lipdTS, key = NA){
       #Are the current values in the TS for this key valid (are they known lipdNames)
 
       validCheck2 <- lapply(lipdTS, function(x) tolower(unname(unlist(x[eval(key)]))) %in%
-                             tolower(unname(unlist(standardTables[[eval(keyGeneral)]]["lipdName"]))))
+                              tolower(unname(unlist(standardTables[[eval(keyGeneral)]]["lipdName"]))))
 
       #Build a data frame to show replacement on known synonyms with valid lipdNames
       synonymDF <- as.data.frame(matrix(nrow = sum(!unlist(validCheck2)), ncol = 5))
@@ -446,14 +670,14 @@ standardizeValue <- function(lipdTS, key = NA){
       }
     }
   }
-#
-#   allTerms <- pullTsVariable(lipdTS, eval(names(df1)[4]))
-#
-#     for (i in 1:length(allTerms)){
-#     if(grepl("delete", allTerms[i])){
-#       TS2$TS[[i]] <- NULL
-#     }
-#   }
+  #
+  #   allTerms <- pullTsVariable(lipdTS, eval(names(df1)[4]))
+  #
+  #     for (i in 1:length(allTerms)){
+  #     if(grepl("delete", allTerms[i])){
+  #       TS2$TS[[i]] <- NULL
+  #     }
+  #   }
 
 
 
@@ -502,10 +726,10 @@ updateNotes <- function(lipdTS, key=NA, metadataChangesDF=NA, standardizeSynonym
   if(!all(is.na(standardizeSynonymDF)) & length(standardizeSynonymDF)>0 & !is.null(standardizeSynonymDF)){
     if(nrow(standardizeSynonymDF)>0){
 
-    standardizeSynonymDF <-
-      standardizeSynonymDF[apply(standardizeSynonymDF,
-                                 1,
-                                 function(x) sum(is.na(x)))!=ncol(standardizeSynonymDF),]
+      standardizeSynonymDF <-
+        standardizeSynonymDF[apply(standardizeSynonymDF,
+                                   1,
+                                   function(x) sum(is.na(x)))!=ncol(standardizeSynonymDF),]
     }
   }
 
@@ -613,7 +837,7 @@ getAllTsNames <- function(TS){
 }
 
 standardizeAll <- function(TS,allKeys = names(standardTables)){
-notesOut <- list()
+  notesOut <- list()
   an <- getAllTsNames(TS)
 
 
@@ -743,3 +967,25 @@ numInvalid <- function(x){
 
 
 
+#helper function to find invalid entries
+is_blank <- function(x, false.triggers=FALSE){
+  if(is.function(x)) return(FALSE) # Some of the tests below trigger
+  # warnings when used on functions
+  return(
+    is.null(x) ||                # Actually this line is unnecessary since
+      length(x) == 0 ||            # length(NULL) = 0, but I like to be clear
+      all(is.na(x)) ||
+      all(x=="") ||
+      all(x=="NA") ||
+      (false.triggers && all(!x))
+  )
+}
+
+is.valid.vec <- function(vec1){
+
+  isValid <- rep(NA, length(vec1))
+  for(cvc in 1:length(vec1)){
+    isValid[cvc] <- !is_blank(vec1[cvc])
+  }
+  return(isValid)
+}

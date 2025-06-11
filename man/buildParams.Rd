@@ -20,6 +20,9 @@ buildParams(
   qcStandardizationCheck = TRUE,
   serialize = TRUE,
   projVersion = NA,
+  firstRun = FALSE,
+  dontLoadEnsemble = TRUE,
+  updateDatasetsInCompilationFromInThisCompilation = TRUE,
   updateLipdverse = TRUE
 )
 }
@@ -37,6 +40,8 @@ buildParams(
 \item{googEmail}{google user ID}
 
 \item{updateWebpages}{update lipdverse webpages (default = TRUE). Usually TRUE unless troubleshooting.}
+
+\item{firstRun}{Is this the first run for this compilation?}
 }
 \description{
 Build parameters

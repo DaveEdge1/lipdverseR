@@ -7,7 +7,8 @@
 getMostRecentInCompilationsTs(
   TS,
   comps.to.include = c("Temp12k", "wNAm", "iso2k", "PalMod", "SISAL-LiPD",
-    "Pages2kTemperature")
+    "Pages2kTemperature", "CoralHydro2k", "HoloceneAbruptChange", "HoloceneHydroclimate",
+    "LakeStatus21k")
 )
 }
 \value{

@@ -8,7 +8,7 @@ library(drake)
 #library(profvis)
 setwd("/Users/nicholas/GitHub/lipdverseR/")
 
-lipdR:::updateStandardTables()
+try(lipdR:::updateStandardTables())
 #lipdR:::checkStandardTables()
 
 googEmail <- "nick.mckay2@gmail.com"
@@ -49,9 +49,10 @@ hydroclimate2k <- drake_plan(
                        qcId = "1OzbcpfnxRUDfYs3XJYaBXniFL5nVL8dW1rIrC_EFPpQ",
                        lastUpdateId = "1xn76PBL4sdxiDO8KdTnSrjJac8mUFIkk3kssJpcIHx4",
                        googEmail = "nick.mckay2@gmail.com",
-ageOrYear = "year",
+                        ageOrYear = "year",
                        updateWebpages = TRUE,
-                      qcStandardizationCheck = FALSE,
+                       updateDatasetsInCompilationFromInThisCompilation = TRUE,
+                       qcStandardizationCheck = FALSE,
                        standardizeTerms = FALSE,
                        serialize = TRUE),
   updateNeeded = checkIfUpdateNeeded(params),
@@ -70,8 +71,8 @@ ageOrYear = "year",
 
 Hydro21k <- drake_plan(
   params = buildParams("Hydro21k",
-                       "/Volumes/data/Dropbox/lipdverse/database",
-                       "/Volumes/data/Dropbox/lipdverse/html/",
+                       "/Users/nicholas/Dropbox/lipdverse/database",
+                       "/Users/nicholas/Dropbox/lipdverse/html/",
                        qcId = "1k3PZTGZ1n1eljVbXx9qR-PtQ-7LIdj-mi7wtEmzu2iM",
                        lastUpdateId = "1uwoNny2tsul94zyD16txceRZLsGo1LEW3-1UcUX0GdY",
                        googEmail = "nick.mckay2@gmail.com",
@@ -95,8 +96,8 @@ Hydro21k <- drake_plan(
 
 HoloceneAbruptChange <- drake_plan(
   params = buildParams("HoloceneAbruptChange",
-                       "/Volumes/data/Dropbox/lipdverse/database",
-                       "/Volumes/data/Dropbox/lipdverse/html/",
+                       "/Users/nicholas/Dropbox/lipdverse/database",
+                       "/Users/nicholas/Dropbox/lipdverse/html/",
                        qcId = "1u4vWrSsXv_6O16juL4WCgaJdFMxBqwerBi6BGhb3IgQ",
                        lastUpdateId = "1Nb_1lIlsAy6QH6HqGwsNNSvJDjcSqmyjWYDUmccLVt4",
                        googEmail = "nick.mckay2@gmail.com",
@@ -146,8 +147,8 @@ test <- drake_plan(
 
 RAW <- drake_plan(
   params = buildParams("RapidArcticWarming",
-                       "/Volumes/data/Dropbox/lipdverse/database",
-                       "/Volumes/data/Dropbox/lipdverse/html/",
+                       "/Users/nicholas/Dropbox/lipdverse/database",
+                       "/Users/nicholas/Dropbox/lipdverse/html/",
                        qcId = "1tYuhgaDPx1HxdSneL0Nl1Aq7LIM14jzbn5Ke55ha_z0",
                        lastUpdateId = "1OEUGZrqo5Ipz8lBZy9hvxtOeOPOc38sswv3-laFBobU",
                        googEmail = "nick.mckay2@gmail.com",
@@ -171,8 +172,8 @@ RAW <- drake_plan(
 
 CH2k <- drake_plan(
   params = buildParams("CoralHydro2k",
-                       "/Volumes/data/Dropbox/lipdverse/CoralHydro2k/",
-                       "/Volumes/data/Dropbox/lipdverse/html/",
+                       "/Users/nicholas/Dropbox/lipdverse/CoralHydro2k/",
+                       "/Users/nicholas/Dropbox/lipdverse/html/",
                        qcId = "1FJAZrPlqc8rYT7cb1sMwEHnpyMSGcQ96MFGsKYJydgU",
                        lastUpdateId = "1N1F1pmepvW3r0l8Wqqm0ibp7MmNJnwAml-quPDQ1wzs",
                        googEmail = "nick.mckay2@gmail.com",
@@ -197,8 +198,8 @@ CH2k <- drake_plan(
 
 GBRCD <- drake_plan(
   params = buildParams("GBRCD",
-                       "/Volumes/data/Dropbox/lipdverse/GBRCD/",
-                       "/Volumes/data/Dropbox/lipdverse/html/",
+                       "/Users/nicholas/Dropbox/lipdverse/GBRCD/",
+                       "/Users/nicholas/Dropbox/lipdverse/html/",
                        qcId = "1TRdVzs-ZA0betJ3GauiHHiCf3liZsy-S2oBqxh8d7PE",
                        lastUpdateId = "1xIRyBKa9NTfFxkSCuedQPGKwZotHUIIV_PbVey1uLTw",
                        googEmail = "nick.mckay2@gmail.com",
@@ -224,8 +225,8 @@ GBRCD <- drake_plan(
 
 Temp12k <- drake_plan(
   params = buildParams("Temp12k",
-                       "/Volumes/data/Dropbox/lipdverse/database/",
-                       "/Volumes/data/Dropbox/lipdverse/html/",
+                       "/Users/nicholas/Dropbox/lipdverse/database/",
+                       "/Users/nicholas/Dropbox/lipdverse/html/",
                        qcId = "1JEm791Nhd4fUuyqece51CSlbR2A2I-pf8B0kFgwynug",
                        lastUpdateId = "1qLRMCfDMbTyffJBWlIj3Zw4CAhJY2SECIY-ckcZ2Wak",
                        googEmail = "nick.mckay2@gmail.com",
@@ -248,8 +249,8 @@ Temp12k <- drake_plan(
 
 Temp24k <- drake_plan(
   params = buildParams("Temp24k",
-                       "~/Dropbox/lipdverse/database/",
-                       "~/Dropbox/lipdverse/html/",
+                       "/Users/nicholas/Dropbox/lipdverse/database/",
+                       "/Users/nicholas/Dropbox/lipdverse/html/",
                        qcId = "17XaSH1MNCtBI6ftEnTOHgy9C6mtXvYpR7JCNUNT-vI8",
                        lastUpdateId = "1BHf1RNwjFkDCs57CxMEbbg3zWmk15Od7HL5wi3FbkK8",
                        googEmail = "nick.mckay2@gmail.com",
@@ -275,12 +276,13 @@ Temp24k <- drake_plan(
 
 LakeStatus21k <- drake_plan(
   params = buildParams("LakeStatus21k",
-                       "~/Dropbox/lipdverse/database/",
-                       "~/Dropbox/lipdverse/html/",
+                       "/Users/nicholas/Dropbox/lipdverse/database/",
+                       "/Users/nicholas/Dropbox/lipdverse/html/",
                        qcId = "1J-lsbE2f98SaMXQ0u-sOfnCS6_nNBz54kU22zYVqkqg",
                        lastUpdateId = "1ydOXLOG8S82LRhb6m0vXH7JpGpziKn_ZDwH7O_fyb-k",
                        googEmail = "nick.mckay2@gmail.com",
-                       qcStandardizationCheck = FALSE,projVersion = "1_0_0",
+                       qcStandardizationCheck = FALSE,
+                       projVersion = "1_0_0",
                        updateWebpages = FALSE,
                        updateLipdverse = FALSE,
                        standardizeTerms = FALSE,
@@ -301,19 +303,21 @@ LakeStatus21k <- drake_plan(
 
 iso2k <- drake_plan(
   params = buildParams("iso2k",
-                       "/Users/nicholas/Dropbox/lipdverse/iso2k/",
+                       "/Users/nicholas/Dropbox/lipdverse/database/",
                        "/Users/nicholas/Dropbox/lipdverse/html/",
                        qcId = "1jdSQqUkR_YuJO8Hsp2x3hOhrW19a0SL6wB2mbp4DA2M",
                        lastUpdateId = "1m0-obq3etFf8fvcfN-jrxsYOHqDV7lcsMpZmidxZKis",
                        googEmail = "nick.mckay2@gmail.com",
                        recreateDataPages = FALSE,
                        updateWebpages = TRUE,
+                       qcStandardizationCheck = FALSE,
                        ageOrYear = "year",
                        serialize = TRUE,
                        standardizeTerms = FALSE),
   updateNeeded = checkIfUpdateNeeded(params),
   data1 = loadInUpdatedData(params),
-  data2 = getQcInfo(params,data1),
+  data2a = getQcInfo(params,data1),
+  data2 = standardizeQCInfo(params,data2a),
   data3 = createQcFromFile(params,data2),
   data4 = mergeQcSheets(params,data3),
   data5 = updateTsFromMergedQc(params,data4),
@@ -326,14 +330,16 @@ iso2k <- drake_plan(
 
 pages2k <- drake_plan(
   params = buildParams("Pages2kTemperature",
-                       "/Users/nicholas/Dropbox/lipdverse/Pages2kTemperature/",
+                       "/Users/nicholas/Dropbox/lipdverse/database/",
                        "/Users/nicholas/Dropbox/lipdverse/html/",
                        qcId = "1_ZvQXV-jXMLi7DSC9vc8tAXdlimfkYrna0fKbIB_5Og",
                        lastUpdateId = "11Vh1iCxt0bEq4a8jlM3uawiPX-C8un8i8GUji3S8guA",
                        googEmail = "nick.mckay2@gmail.com",
                        recreateDataPages = FALSE,
                        updateWebpages = TRUE,
+                       qcStandardizationCheck = FALSE,
                        ageOrYear = "year",
+                       dontLoadEnsemble = FALSE,
                        serialize = TRUE,
                        standardizeTerms = FALSE),
   updateNeeded = checkIfUpdateNeeded(params),
@@ -359,7 +365,7 @@ while(TRUE){
   }
   print(paste("try",count))
   try(
-    drake::make(Temp24k,lock_envir = FALSE)
+    drake::make(pages2k,lock_envir = FALSE)
   )
   prog <- drake::drake_progress()
   if(all(prog$progress == "done")){
@@ -367,11 +373,11 @@ while(TRUE){
   }
 }
 
-af <- list.dirs("~/Dropbox/lipdverse/html/",recursive = FALSE,full.names = FALSE)
+af <- list.dirs("/Users/nicholas/Dropbox/lipdverse/html/",recursive = FALSE,full.names = FALSE)
 
 
 #update vocab website
-#source("~/GitHub/lipdverse-website/updateWebserver.R")
+#source("/Users/nicholas/GitHub/lipdverse-website/updateWebserver.R")
 
 
 #rsync -rvauz --delete /Users/nicholas/Dropbox/lipdverse/html/HoloceneAbruptChange/ npm4@linux.cefns.nau.edu:/www/cefns.nau.edu/seses/lipdverse/HoloceneAbruptChange
@@ -387,6 +393,7 @@ af <- list.dirs("~/Dropbox/lipdverse/html/",recursive = FALSE,full.names = FALSE
 #rsync -rvauz --delete /Users/nicholas/Dropbox/lipdverse/html/lipdverse/ npm4@linux.cefns.nau.edu:/www/cefns.nau.edu/seses/lipdverse/lipdverse
 
 #rsync -rvauz --delete /Users/nicholas/Dropbox/lipdverse/html/GBRCD/ npm4@linux.cefns.nau.edu:/www/cefns.nau.edu/seses/lipdverse/GBRCD
+#rsync -rvauz /Users/nicholas/Dropbox/lipdverse/html/Pages2kTemperature/ npm4@linux.cefns.nau.edu:/www/cefns.nau.edu/seses/lipdverse/Pages2kTemperature
 
 #rsync -rvauz /Users/nicholas/Dropbox/lipdverse/html/hydroclimate2k/ npm4@linux.cefns.nau.edu:/www/cefns.nau.edu/seses/lipdverse/hydroclimate2k
 #rsync -rvauz /Users/nicholas/Dropbox/lipdverse/html/LakeStatus21k/ npm4@linux.cefns.nau.edu:/www/cefns.nau.edu/seses/lipdverse/LakeStatus21k
