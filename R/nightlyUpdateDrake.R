@@ -33,14 +33,7 @@ googleDriveUpdateTime <- function(googId,tzone = "UTC"){
 updateNeeded <- function(project,webDirectory,lipdDir,qcId,versionMetaId = "1OHD7PXEQ_5Lq6GxtzYvPA76bpQvN1_eYoFR0X80FIrY",googEmail = NULL){
 
   #compare files with MD5s
-  # currentMD5 <- directoryMD5(lipdDir)
-  # dir(lipdDir)
-  #
-  # lastMD5 <- directoryMD5(file.path(webDirectory,project,"current_version"))
-  #
-  return(TRUE)
   googlesheets4::gs4_auth(email = googEmail,cache = ".secret")
-
 
   #compare QC update times
   versionSheet <- read_sheet_retry(googledrive::as_id(versionMetaId)) %>%
@@ -61,8 +54,8 @@ updateNeeded <- function(project,webDirectory,lipdDir,qcId,versionMetaId = "1OHD
 
   }
   #most recent file edit time
-  lastMod <- purrr::map(list.files(lipdDir,pattern = "*.lpd",full.names = TRUE),file.mtime )
-  lastMod <- lubridate::with_tz(lubridate::ymd_hms(lastMod[[which.max(unlist(lastMod))]],tz = "America/Phoenix"),tzone = "UTC")
+  # lastMod <- purrr::map(list.files(lipdDir,pattern = "*.lpd",full.names = TRUE),file.mtime )
+  # lastMod <- lubridate::with_tz(lubridate::ymd_hms(lastMod[[which.max(unlist(lastMod))]],tz = "America/Phoenix"),tzone = "UTC")
 
 
   #  check based on folder modification time
@@ -75,8 +68,10 @@ updateNeeded <- function(project,webDirectory,lipdDir,qcId,versionMetaId = "1OHD
   qcUpdate <- googleDriveUpdateTime(qcId)
 
   qcNeedsUpdating <- TRUE
-  if(lastUpdate > qcUpdate){
-    qcNeedsUpdating <- FALSE
+  if(!is.na(lastUpdate)){
+    if(lastUpdate > qcUpdate){
+      qcNeedsUpdating <- FALSE
+    }
   }
 
   if(qcNeedsUpdating | filesNeedUpdating){
@@ -85,7 +80,12 @@ updateNeeded <- function(project,webDirectory,lipdDir,qcId,versionMetaId = "1OHD
     needsUpdating <- FALSE
   }
 
+  # if(!needsUpdating){
+  #   stop("This compilation seems up to date!")
+  # }
+
   return(needsUpdating)
+
 
 }
 
@@ -188,7 +188,20 @@ assignVariablesFromList <- function(params,env = parent.env(environment())){
 #' @param qcId google sheets ID for the qc sheet
 #' @param lastUpdateId google sheets ID for the last version
 #' @param updateWebpages update lipdverse webpages (default = TRUE). Usually TRUE unless troubleshooting.
+#' @param versionMetaId
+#' @param standardizeTerms
+#' @param ageOrYear
+#' @param recreateDataPages
+#' @param restrictWebpagesToCompilation
+#' @param qcStandardizationCheck
+#' @param serialize
+#' @param projVersion in "a_b_c" format
+#' @param firstRun Is this the first run for this compilation?
+#' @param dontLoadEnsemble
+#' @param updateDatasetsInCompilationFromInThisCompilation
+#' @param updateLipdverse
 #' @param googEmail google user ID
+#'
 #' @import purrr
 #' @import googlesheets4
 #' @import readr
@@ -210,6 +223,9 @@ buildParams <- function(project,
                         qcStandardizationCheck = TRUE,
                         serialize = TRUE,
                         projVersion = NA,
+                        firstRun = FALSE,
+                        dontLoadEnsemble = TRUE,
+                        updateDatasetsInCompilationFromInThisCompilation = TRUE,
                         updateLipdverse = TRUE){
 
   an <- ls()
@@ -233,18 +249,21 @@ checkIfUpdateNeeded <- function(params){
   for(i in 1:length(params)){
     assign(names(params)[i],params[[i]])
   }
-
+  if(firstRun){#then we need it!
+    return(TRUE)
+  }
 
   if(is.na(projVersion)){#skip check if new version is specified
     #check if update is necessary
     toUpdate <- updateNeeded(project,webDirectory,lipdDir,qcId,googEmail = googEmail)
-
-    if(!toUpdate){
-      return("No update needed")
-    }else{
-      return("Update needed")
-    }
+  }else{
+    toUpdate <- TRUE
   }
+  toUpdate <- TRUE
+  if(!toUpdate){
+    stop("It doesn't look like an update is needed")
+  }
+  return(toUpdate)
 }
 
 
@@ -265,8 +284,44 @@ loadInUpdatedData <- function(params){
   if(grepl("lipdverse/database",lipdDir,fixed = TRUE)){
     #getDatasetInCompilationFromQC()
 
+
+    if(params$updateDatasetsInCompilationFromInThisCompilation){
+      #get the google qc sheet
+      googlesheets4::gs4_auth(email = googEmail,cache = ".secret")
+      googledrive::drive_auth(email = googEmail,cache = ".secret")
+      googDsComp <- read_sheet_retry(ss = qcId, sheet = "datasetsInCompilation",col_types = "c")
+      qcB <- getGoogleQCSheet(qcId)
+
+      #what datasets should be considered based on inCompilation
+      ad <- qcB |>
+        filter(inThisCompilation == "TRUE") |>
+        select(dataSetName) |>
+        distinct() |>
+        unlist()
+
+      sbt <- which(googDsComp$dsn %in% ad)
+
+      if(length(sbt) < length(ad)){
+        #see if we need to change the names based on the datasetIds
+
+
+        stop("This feature not yet set")
+      }
+
+      #check
+      if(!all(sort(googDsComp$dsn[sbt]) == sort(ad))){
+        stop("These should match")
+      }
+
+      googDsComp$inComp[sbt] <- "TRUE"
+
+      googlesheets4::write_sheet(googDsComp,ss = qcId, sheet = "datasetsInCompilation")
+      dscomp <- googDsComp
+    }else{
+      dscomp <- read_sheet_retry(ss = qcId,sheet = "datasetsInCompilation")
+    }
+
     #0. Figure out which datasets to load based on QC sheet.
-    dscomp <- read_sheet_retry(ss = qcId,sheet = "datasetsInCompilation")
     dscomp$inComp <- as.character(dscomp$inComp)
 
     #make sure that all names there are in the lipdDir, and that there are no duplicates
@@ -282,7 +337,7 @@ loadInUpdatedData <- function(params){
 
     #remove this next time
     if(length(missing) > 0){
-    dscomp <- dscomp[-missing,]
+      dscomp <- dscomp[-missing,]
     }
 
     #see if any in dscomp don't exist again
@@ -312,7 +367,7 @@ loadInUpdatedData <- function(params){
 
   #1. load in (potentially updated) files
   flagUpdate(project)
-  D <- lipdR::readLipd(filesToConsider)
+  D <- lipdR::readLipd(filesToConsider,dont.load.ensemble = dontLoadEnsemble)
 
 
   #create datasetIds for records that don't have them
@@ -344,17 +399,17 @@ loadInUpdatedData <- function(params){
   #make sure that primary chronologies are named appropriately
   D <- purrr::map(D,renamePrimaryChron)
 
-  if(standardizeTerms){
-    D <- purrr::map(D,cleanOriginalDataUrl)
-    D <- purrr::map(D,hasDepth)
-    D <- purrr::map(D,nUniqueAges)
-    D <- purrr::map(D,nGoodAges)
-    D <- purrr::map(D,nOtherAges)
-    # D <- purrr::map(D,fixExcelIssues)
-    D <- purrr::map(D,standardizeChronVariableNames)
-  }
+  # if(standardizeTerms){
+  #   D <- purrr::map(D,cleanOriginalDataUrl)
+  #   D <- purrr::map(D,hasDepth)
+  #   D <- purrr::map(D,nUniqueAges)
+  #   D <- purrr::map(D,nGoodAges)
+  #   D <- purrr::map(D,nOtherAges)
+  #   # D <- purrr::map(D,fixExcelIssues)
+  #   D <- purrr::map(D,standardizeChronVariableNames)
+  # }
 
-  #1a. Screen by some criterion...
+  #1a. Screen by some criteria...
 
   #check for TSid
   TS <- lipdR::extractTs(D)
@@ -369,7 +424,7 @@ loadInUpdatedData <- function(params){
     numericAge[un] <- any(isNumAge[these])
   }
 
-    if(any(!numericAge)){
+  if(any(!numericAge)){
     print(uDsn[!numericAge])
     stop("these datasets have non numeric ages")
   }
@@ -377,13 +432,13 @@ loadInUpdatedData <- function(params){
   #create grouping terms for later standardization
 
   #TO DO!# remove entries that don't fall into the groups/lumps!
-  if(standardizeTerms){
-    #Do some cleaning
-    TS <- standardizeTsValues(TS)
-    TS <- fix_pubYear(TS)
-    TS <- fixKiloyearsTs(TS)
-    TS <- purrr::map(TS,removeEmptyInterpretationsFromTs)
-  }
+  # if(standardizeTerms){
+  #   #Do some cleaning
+  #   TS <- standardizeTsValues(TS)
+  #   TS <- fix_pubYear(TS)
+  #   TS <- fixKiloyearsTs(TS)
+  #   TS <- purrr::map(TS,removeEmptyInterpretationsFromTs)
+  # }
 
   #get some relevant information
   TSid <- lipdR::pullTsVariable(TS,"paleoData_TSid")
@@ -423,6 +478,11 @@ getQcInfo <- function(params,data){
     assign(names(data)[i],data[[i]])
   }
 
+
+
+
+
+
   #get the google qc sheet
   qcB <- getGoogleQCSheet(qcId)
 
@@ -457,7 +517,7 @@ getQcInfo <- function(params,data){
 #' @return
 #' @export
 standardizeQCInfo <- function(params,data){
-
+  print("here")
   #assignVariablesFromList(params)
   for(i in 1:length(params)){
     assign(names(params)[i],params[[i]])
@@ -672,6 +732,9 @@ standardizeQCInfo <- function(params,data){
     projVersion <- tickVersion(project,qcIc,tsIc,googEmail = googEmail)
   }
 
+  if(all(is.na(projVersion))){
+    stop("projVersion should not be NA at this point")
+  }
 
   #setup new version
   if(!dir.exists(file.path(webDirectory,project))){
@@ -737,7 +800,9 @@ createQcFromFile <- function(params,data){
 
   if(!exists("sTS")){
     sTS <- splitInterpretationByScope(TS)
+    data$sTS <- sTS
   }
+
 
   #2. Create a new qc sheet from files
   qcC <- createQCdataFrame(sTS,templateId = qcId,ageOrYear = ageOrYear,compilationName = project,compVersion = lastProjVersion)
@@ -780,6 +845,7 @@ mergeQcSheets <- function(params,data){
   for(i in 1:length(data)){
     assign(names(data)[i],data[[i]])
   }
+
   #4. Load in the old QC sheet (from last update), and merge with new ones
   rosetta <- lipdverseR::rosettaStone()
   qcA <- readr::read_csv(file.path(webDirectory,project,"lastUpdate.csv"),guess_max = Inf) %>%
@@ -886,8 +952,6 @@ mergeQcSheets <- function(params,data){
   #this should fix conflicts that shouldnt exist
   #qc <- resolveDumbConflicts(qc)
 
-
-
   data$qc <- qc
   #data$qcA <- qcA
   return(data)
@@ -922,7 +986,12 @@ updateTsFromMergedQc <- function(params,data){
     assign(names(data)[i],data[[i]])
   }
 
+  if(!exists("sTS")){
+    sTS <- splitInterpretationByScope(data$TS)
+  }
+
   rm("data")
+
 
   #5. Update sTS from merged qc
   #p <- profvis({nsTS <- updateFromQC(sTS,qc,project,projVersion)},interval = 1)
@@ -941,7 +1010,8 @@ updateTsFromMergedQc <- function(params,data){
     writeValidationReportToQCSheet(validationReport,qcId)
   }
 
-  if(standardizeTerms){#To do: #make this its own function
+  if(standardizeTerms){#this is probably obsolete now
+    #To do: #make this its own function
     #proxy lumps
     groupFrom <- c("paleoData_proxy","paleoData_inferredMaterial","interpretation1_variable","interpretation2_variable","interpretation3_variable","interpretation4_variable","interpretation5_variable","interpretation6_variable","interpretation7_variable","interpretation8_variable")
 
@@ -1024,17 +1094,16 @@ updateTsFromMergedQc <- function(params,data){
 
   dsidKey <- dplyr::left_join(dsidsNew,dsidsOriginal,by = "datasetId")
 
+  #assign primary time columns
+  nD <- map(nD,assignPrimaryTimeColumns,update.changelog = FALSE)
+
   print("Updating changelogs....")
   #loop through DSid and create changelog (this is for files, not for the project)
   for(dfi in 1:nrow(dsidKey)){
     newName <- dsidKey$dataSetNameNew[dfi]
     oldName <- dsidKey$dataSetNameOrig[dfi]
 
-    cl <- try(createChangelog(Dloaded[[oldName]],nD[[newName]]))
-    if(is(cl,"try-error")){
-      #cl <- try(createChangelog(Dloaded[[oldName]],Dloaded[[oldName]])) #this is a quick fix, remove it.
-      stop("Error in dataset changelogging") #turn this back on
-    }
+    cl <- createChangelog(Dloaded[[oldName]],nD[[newName]])
 
     nD[[newName]] <- updateChangelog(nD[[newName]],
                                      changelog = cl,
@@ -1043,6 +1112,7 @@ updateTsFromMergedQc <- function(params,data){
 
 
   newData <- list(nD = nD,
+                  Dloaded = Dloaded,
                   ndsn = ndsn,
                   nicdi = nicdi,
                   dsidKey = dsidKey,
@@ -1053,8 +1123,6 @@ updateTsFromMergedQc <- function(params,data){
 
   data <- newData
   return(data)
-
-
 }
 
 createDataPages <- function(params,data){
@@ -1068,22 +1136,11 @@ createDataPages <- function(params,data){
     assign(names(data)[i],data[[i]])
   }
 
-  nD <- map(nD,assignPrimaryTimeColumns)
-
   #re extract nTS
   nTS <- extractTs(nD)
 
-  #temporary
-  #create changelog
-  for(d in 1:length(nD)){
-    if(is.null(nD[[d]]$changelog)){
-      nD[[d]] <- initializeChangelog(nD[[d]])
-    }
-  }
-
-  googlesheets4::gs4_auth(email = googEmail,cache = ".secret")
   newInv <- createInventory(nD)
-  oldInv <- getInventory(lipdDir,googEmail)
+  oldInv <- createInventory(Dloaded)
 
   #find any updates to versions, or new datasets that we need to create for this
   if(recreateDataPages){
@@ -1091,20 +1148,12 @@ createDataPages <- function(params,data){
     toCreate <- dplyr::full_join(oldInv,newInv,by = "datasetId")
     toUpdate <- data.frame()
   }else{#only create what's changed
-
-
-
-
-
     toCreate <- dplyr::full_join(oldInv,newInv,by = "datasetId") %>%
       dplyr::filter(dataSetVersion.x != dataSetVersion.y |  is.na(dataSetVersion.x))
 
-
     #update pages for data in compilation, but that didn't change
-
     toUpdate <- dplyr::full_join(oldInv,newInv,by = "datasetId") %>%
       dplyr::filter(dataSetVersion.x == dataSetVersion.y &  !is.na(dataSetVersion.x))
-
   }
 
   if(nrow(toUpdate) > 0 & nrow(toCreate) > 0){#check to make sure were good, if need be
@@ -1128,8 +1177,14 @@ createDataPages <- function(params,data){
         stop("no datasets left to create")
       }
     }
-    print("Creating new data webpages...")
-    purrr::walk(tc,quietly(createDataWebPage),webdir = webDirectory,.progress = TRUE)
+    print(glue::glue("Creating {length(tc)} new data webpages..."))
+    if(length(tc) < 50){
+      purrr::walk(tc,quietly(createDataWebPage),webdir = webDirectory,.progress = TRUE)
+    }else{
+      future::plan(future::sequential) #reset first
+      future::plan(future::multisession, workers = 16)
+      furrr::future_walk(tc,quietly(createDataWebPage),webdir = webDirectory,.progress = TRUE)
+    }
   }
 
   #if  changes
@@ -1145,8 +1200,14 @@ createDataPages <- function(params,data){
         stop("no datasets left to update")
       }
     }
-    print("Updating data webpages...")
-    purrr::walk(tu,quietly(updateDataWebPageForCompilation),webdir = webDirectory,.progress = TRUE)
+    print(glue::glue("Updating {length(tu)} data webpages..."))
+    if(length(tu) < 50){
+      purrr::walk(tu,quietly(updateDataWebPageForCompilation),webdir = webDirectory,.progress = TRUE)
+    }else{
+      future::plan(future::sequential) #reset first
+      future::plan(future::multisession, workers = 16)
+      furrr::future_walk(tu,quietly(updateDataWebPageForCompilation),webdir = webDirectory,.progress = TRUE)
+    }
   }
 
 
@@ -1186,15 +1247,15 @@ createProjectWebpages <- function(params,data){
   createProjectOverviewPage(project,projVersion,webDirectory)
 
   #update lipdverse overview page
-  createProjectSidebarHtml("lipdverse", "current_version",webDirectory)
-  createProjectOverviewPage("lipdverse", "current_version",webDirectory)
+  if(updateLipdverse){
+    createProjectSidebarHtml("lipdverse", "current_version",webDirectory)
+    createProjectOverviewPage("lipdverse", "current_version",webDirectory)
+  }
 
   #get only those in the compilation
-  firstRun <- TRUE
   if(firstRun){
     dsnInComp <- names(nD)
     nicdi <- c()
-
   }
 
   nDic <- nD[unique(dsnInComp)] #the unique shouldn't be necessary here, but also shouldn't hurt since it was uniqued earlier
@@ -1204,6 +1265,10 @@ createProjectWebpages <- function(params,data){
   tcdf <- data.frame(dsid = map_chr(nDic,"datasetId"),
                      dsn = map_chr(nDic,"dataSetName"),
                      vers = map_chr(nDic,getVersion))
+
+  if(nrow(tcdf) == 0){
+    stop("It looks like there are 0 datasets in the compilation. This is probably bad. Check the inThisCompilation column in the QC sheet")
+  }
 
   #create all the project shell sites
   print(glue::glue("Creating {nrow(tcdf)} project shell sites"))
@@ -1222,6 +1287,7 @@ createProjectWebpages <- function(params,data){
   #create a project bibliography
   nnTStib <- ts2tibble(nnTS)
 
+  message("Updating bibliography")
   allRefIc <- createBibDfFromLipd(nDic)
   updateJsonDsidBibReference(allRefIc)
   updateGoogleReferencesFromLipd(allRefIc)
@@ -1278,7 +1344,7 @@ createProjectWebpages <- function(params,data){
 
     lipdverseDirectory <- purrr:::map_dfr(allDataDir,getDataDetails)
 
-    LV <- readLipd(lipdverseDirectory$path)
+    LV <- readLipd(lipdverseDirectory$path,dont.load.ensemble = dontLoadEnsemble)
 
     allDataDetails <- data.frame(dsid = map_chr(LV,"datasetId"),
                                  dsn = map_chr(LV,"dataSetName"),
@@ -1384,7 +1450,7 @@ createProjectWebpages <- function(params,data){
   DF <- nDic
 
   if(serialize){
-    try(createSerializations(D = DF,webDirectory,project,projVersion),silent = FALSE)
+    try(createSerializations(D = DF,webDirectory,project,projVersion,dontLoadEnsemble = dontLoadEnsemble),silent = FALSE)
     if(updateLipdverse){
       try(createSerializations(D = LV,webDirectory,"lipdverse","current_version"),silent = FALSE)
     }
@@ -1459,7 +1525,7 @@ createWebpages <- function(params,data){
     createProjectDashboards(nD[icdi],nTS[ictsi],webDirectory,project,projVersion)
 
     #load back in files
-    DF <- readLipd(file.path(webDirectory,project,projVersion))
+    DF <- readLipd(file.path(webDirectory,project,projVersion),dont.load.ensemble = dontLoadEnsemble)
 
     if(serialize){
       try(createSerializations(D = DF,webDirectory,project,projVersion),silent = TRUE)
@@ -1695,19 +1761,19 @@ changeloggingAndUpdating <- function(params,data){
     if(!isDirectory(file.path(webDirectory,project,lastVersionNumber))){
       Dpo <- list()
     }else{
-    Dpo <- readLipd(file.path(webDirectory,project,lastVersionNumber))
+      Dpo <- readLipd(file.path(webDirectory,project,lastVersionNumber),dont.load.ensemble = dontLoadEnsemble)
     }
   }
 
 
   if(length(Dpo)>0){
     try(createProjectChangelog(Dold = Dpo,
-                           Dnew = DF,
-                           proj = project,
-                           projVersOld = lastVersionNumber,
-                           projVersNew = projVersion,
-                           webDirectory = webDirectory,
-                           notesTib = dsidKey))
+                               Dnew = DF,
+                               proj = project,
+                               projVersOld = lastVersionNumber,
+                               projVersNew = projVersion,
+                               webDirectory = webDirectory,
+                               notesTib = dsidKey))
 
   }else{#write empty changelog
     cle <- glue::glue("## Changelog is empty - probably because there were no files in the web directory for {project} version {lastVersionNumber}")
@@ -1750,7 +1816,7 @@ changeloggingAndUpdating <- function(params,data){
 
 
   unlink(x = filesToUltimatelyDelete,force = TRUE, recursive = TRUE)
-  writeLipd(DF,path = lipdDir,removeNamesFromLists = TRUE)
+  writeLipd(DF,path = lipdDir,removeNamesFromLists = TRUE,delete.saved.ensembles = TRUE)
   unFlagUpdate()
 
 }
@@ -1776,6 +1842,8 @@ createSerializations <- function(D,
                                  project,
                                  projVersion,
                                  remove.ensembles = TRUE,
+                                 dontLoadEnsemble = FALSE,
+                                 rOnly = FALSE,
                                  matlabUtilitiesPath = "~/GitHub/LiPD-utilities/Matlab",
                                  matlabPath = "/Applications/MATLAB_R2023a.app/bin/matlab",
                                  python3Path="/opt/anaconda3/envs/pyleo/bin/python3"){
@@ -1793,8 +1861,9 @@ createSerializations <- function(D,
   }
 
   TS <- extractTs(D)
+  ts <- ts2tibble(TS)
   #sTS <- splitInterpretationByScope(TS)
-  save(list = c("D","TS"),file = file.path(webDirectory,project,projVersion,stringr::str_c(project,projVersion,".RData")))
+  save(list = c("D","ts"),file = file.path(webDirectory,project,projVersion,stringr::str_c(project,projVersion,".RData")))
 
 
 
@@ -1803,14 +1872,14 @@ createSerializations <- function(D,
   unlink(lpdtmp,recursive = TRUE)
   dir.create(lpdtmp)
 
-  writeLipd(D,path = lpdtmp)
+  writeLipd(D,path = lpdtmp,delete.saved.ensembles = FALSE)
 
   #zip it
   zip(zipfile = file.path(webDirectory,project,projVersion,str_c(project,projVersion,".zip")),files = list.files(lpdtmp,pattern= "*.lpd",full.names = TRUE),extras = '-j')
 
 
 
-  if(has.ensembles){
+  if(has.ensembles & !dontLoadEnsemble){
     print("writing again with ensembles")
     TS <- extractTs(Do)
     #sTS <- splitInterpretationByScope(TS)
@@ -1821,7 +1890,7 @@ createSerializations <- function(D,
     unlink(lpdtmpens,recursive = TRUE)
     dir.create(lpdtmpens)
 
-    writeLipd(Do,path = lpdtmpens)
+    writeLipd(Do,path = lpdtmpens,delete.saved.ensembles = FALSE)
 
     #zip it
     zip(zipfile = file.path(webDirectory,project,projVersion,str_c(project,projVersion,"-ensembles.zip")),files = list.files(lpdtmpens,pattern= "*.lpd",full.names = TRUE))
@@ -1829,40 +1898,48 @@ createSerializations <- function(D,
 
 
 
+  if(!rOnly){
+    #matlab
+    mfile <- stringr::str_c("addpath(genpath('",matlabUtilitiesPath,"'));\n") %>%
+      stringr::str_c("D = readLiPD('",lpdtmp,"');\n") %>%
+      #stringr::str_c("TS = extractTs(D);\n") %>%
+      #stringr::str_c("sTS = splitInterpretationByScope(TS);\n") %>%
+      stringr::str_c("save ",file.path(webDirectory,project,projVersion,stringr::str_c(project,projVersion,".mat")),' D\n') %>%
+      stringr::str_c("exit")
 
-  #matlab
-  mfile <- stringr::str_c("addpath(genpath('",matlabUtilitiesPath,"'));\n") %>%
-    stringr::str_c("D = readLiPD('",lpdtmp,"');\n") %>%
-    stringr::str_c("TS = extractTs(D);\n") %>%
-    stringr::str_c("sTS = splitInterpretationByScope(TS);\n") %>%
-    stringr::str_c("save ",file.path(webDirectory,project,projVersion,stringr::str_c(project,projVersion,".mat")),' D TS sTS\n') %>%
-    stringr::str_c("exit")
+    #write the file
+    readr::write_file(mfile,path = file.path(webDirectory,project,projVersion,"createSerialization.m"))
 
-  #write the file
-  readr::write_file(mfile,path = file.path(webDirectory,project,projVersion,"createSerialization.m"))
-
-  #run the file
-  try(system(stringr::str_c(matlabPath," -nodesktop -nosplash -nodisplay -r \"run('",file.path(webDirectory,project,projVersion,"createSerialization.m"),"')\"")))
+    #run the file
+    try(system(stringr::str_c(matlabPath," -nodesktop -nosplash -nodisplay -r \"run('",file.path(webDirectory,project,projVersion,"createSerialization.m"),"')\"")))
 
 
-  #Python
-  pyfile <- "import lipd\n" %>%
-    stringr::str_c("import pickle\n") %>%
-    stringr::str_c("D = lipd.readLipd('",lpdtmp,"/')\n") %>%
-    stringr::str_c("TS = lipd.extractTs(D)\n") %>%
-    stringr::str_c("filetosave = open('",file.path(webDirectory,project,projVersion,stringr::str_c(project,projVersion,".pkl'")),",'wb')\n") %>%
-    stringr::str_c("all_data = {}\n") %>%
-    stringr::str_c("all_data['D'] = D\n") %>%
-    stringr::str_c("all_data['TS']  = TS\n") %>%
-    stringr::str_c("pickle.dump(all_data, filetosave,protocol = 2)\n") %>%
-    stringr::str_c("filetosave.close()")
+    #Python
+    pyfile <- "import lipd\n" %>%
+      stringr::str_c("import pickle\n") %>%
+      stringr::str_c("D = lipd.readLipd('",lpdtmp,"/')\n") %>%
+      stringr::str_c("TS = lipd.extractTs(D)\n") %>%
+      stringr::str_c("filetosave = open('",file.path(webDirectory,project,projVersion,stringr::str_c(project,projVersion,".pkl'")),",'wb')\n") %>%
+      stringr::str_c("all_data = {}\n") %>%
+      stringr::str_c("all_data['D'] = D\n") %>%
+      stringr::str_c("all_data['TS']  = TS\n") %>%
+      stringr::str_c("pickle.dump(all_data, filetosave,protocol = 2)\n") %>%
+      stringr::str_c("filetosave.close()")
 
-  #write the file
-  readr::write_file(pyfile,path = file.path(webDirectory,project,projVersion,"createSerialization.py"))
+    #write the file
+    readr::write_file(pyfile,path = file.path(webDirectory,project,projVersion,"createSerialization.py"))
 
-  #run the file
-  try(system(stringr::str_c(python3Path, " ",file.path(webDirectory,project,projVersion,"createSerialization.py"))))
-
+    #run the file
+    try(system(stringr::str_c(python3Path, " ",file.path(webDirectory,project,projVersion,"createSerialization.py"))))
+  }
 }
 
-
+updateCompilationMetadata <- function(ts,webDirectory = "~/Dropbox/lipdverse/html/"){
+  #update compilation metadata
+  compMd <- getAllCompilationsAndVersions(ts)
+  jsonMeta <- jsonlite::toJSON(compMd,pretty = TRUE,auto_unbox = TRUE)
+  write(jsonMeta, file=file.path(webDirectory,"lipdverse","compilationMetadata.json"))
+  upCmd <- glue::glue('rsync -v {file.path(webDirectory,"lipdverse","*")} npm4@linux.cefns.nau.edu:/www/cefns.nau.edu/seses/lipdverse/lipdverse')
+  system(upCmd)
+}
+#

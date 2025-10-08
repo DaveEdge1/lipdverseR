@@ -1,5 +1,164 @@
-#get most recent compiltations
+getCompsAndVers <- function(comp,vers,...){
 
+}
+
+getAllCompilationsAndVersions <- function(ts){
+  tsn <- names(ts)
+  icNames <- tsn[str_detect(tsn,pattern = "inCompilationBeta\\d+_compilationName")]
+  icvNames <- tsn[str_detect(tsn,pattern = "inCompilationBeta\\d+_compilationVersion")]
+
+  if(length(icNames) != length(icvNames)){
+    stop("I don't think this should happen")
+  }
+
+  #get all compilation options
+
+  allComps <- c()
+  for(i in seq_along(icNames)){
+    allComps <- unique(c(allComps,ts[[icNames[i]]]))
+  }
+  allComps <- c(na.omit(allComps))
+
+  compilationMetadata <- vector(mode = "list",length = length(allComps))
+  names(compilationMetadata) <- allComps
+  for(i in 1:length(compilationMetadata)){
+    compilationMetadata[[i]]$compilationName <- allComps[i]
+    allVers <- c()
+    for(iv in seq_along(icvNames)){
+      #get versions that are in this compilation
+      itc <- which(ts[[icNames[iv]]] %in% allComps[i])
+
+      allVers <- unique(c(allVers,unlist(ts[[icvNames[iv]]][itc])))
+    }
+    allVers <- c(na.omit(allVers))
+    compilationMetadata[[i]]$versions <- allVers
+  }
+
+  return(compilationMetadata)
+}
+
+
+#' Look for fields anywhere in a list
+#'
+#' @param x
+#' @param fieldStartsWith
+#'
+#' @returns output
+#' @export
+recurse <- function(x,fieldStartsWith = "inCompilation") {
+  if (!is.list(x)) {
+    return(list())
+  }
+
+  # Get named elements that start with "inCompilation"
+  matched <- if (!is.null(names(x))) {
+    x[stringr::str_starts(names(x), fieldStartsWith)]
+  } else {
+    list()
+  }
+
+  # Recursively collect matches from all list elements
+  deeper_matches <- purrr::map(x, recurse)
+
+  # Combine current level's matches with deeper ones
+  return(c(matched, purrr::flatten(deeper_matches)))
+}
+
+
+#' Find if a dataset is in a compilation
+#'
+#' @param L
+#' @param compName
+#' @param compVersion
+#'
+#' @returns
+#' @export
+#'
+#' @examples
+datasetInCompilation <- function(L, compName = "any", compVersion = "any" ){
+  #find fields named inCompilation* at any level in the list
+  # Recursively apply to all list elements
+  #result <- recurse(L)
+    result <- list()
+    stack <- list(L)
+
+    while (length(stack) > 0) {
+      current <- stack[[1]]
+      stack <- stack[-1]
+
+      if (is.list(current)) {
+        nms <- names(current)
+
+        # Extract matching named elements
+        if (!is.null(nms)) {
+          matched <- str_starts(nms, "inCompilation")
+          if (any(matched)) {
+            result <- append(result, current[matched])
+          }
+        }
+
+        # Push all sub-elements to the stack
+        stack <- c(current, stack)
+      }
+    }
+    result
+
+  allNames <- map(flatten(result),"compilationName")
+  if(compName == "any"){
+    return(unique(allNames))
+  }
+  allVersions <- map(flatten(result),"compilationVersion")
+  compVersion <- stringr::str_replace_all(compVersion,"\\.","_")
+
+  itc <- FALSE
+  ti <- which(allNames == compName)
+
+  if(length(ti) > 0){
+    if(compVersion == "any"){
+      itc <- TRUE
+    }else{
+      av <- unlist(allVersions[ti]) |> unique()
+      if(compVersion %in% av){
+        itc <- TRUE
+      }
+
+    }
+  }
+  return(itc)
+}
+
+
+
+
+timeseriesInCompilation <- function(ts, compName, compVersion = "any" ){
+  tsn <- names(ts)
+  icNames <- tsn[str_detect(tsn,pattern = "inCompilationBeta\\d+_compilationName")]
+  icvNames <- tsn[str_detect(tsn,pattern = "inCompilationBeta\\d+_compilationVersion")]
+
+  if(length(icNames) != length(icvNames)){
+    stop("I don't think this should happen")
+  }
+
+  ic <- matrix(NA,nrow = nrow(ts),ncol = length(icNames))
+  for(i in seq_along(icNames)){
+    ic[,i] <- ts[[icNames[i]]] %in% compName
+  }
+  allIc <- apply(ic,1,any)
+
+  if(all(compVersion == "any")){
+    allIcv <- rep(TRUE,times = nrow(ts))
+  }else{
+    icv <- matrix(NA,nrow = nrow(ts),ncol = length(icNames))
+    for(i in seq_along(icvNames)){
+      icv[,i] <- purrr::map_lgl(ts[[icvNames[i]]], \(x) any(x %in% compVersion))
+    }
+    allIcv <- apply(icv,1,any)
+  }
+
+  inComp <- apply(cbind(allIc,allIcv),1,all)
+  return(inComp)
+
+}
 
 #' Get most recent compilations and versions
 #'
@@ -13,7 +172,11 @@ getMostRecentInCompilationsTs <- function(TS,
                                                                "iso2k",
                                                                "PalMod",
                                                                "SISAL-LiPD",
-                                                               "Pages2kTemperature")){
+                                                               "Pages2kTemperature",
+                                                               "CoralHydro2k",
+                                                               "HoloceneAbruptChange",
+                                                               "HoloceneHydroclimate",
+                                                               "LakeStatus21k")){
 
   allNames <- sort(unique(unlist(sapply(TS,names))))#get all names in TS
   #get all the names of the compilations
@@ -460,8 +623,8 @@ updateFromQC <- function(sTS,qcs,compilationName = "test",newVersion = "0.0.0"){
   TSidList <- c(extraTSid, qcTSid[rev(seq_along(qcTSid))])
 
 
- counter <- 0
- pb = txtProgressBar(min = 0, max = length(TSidList), initial = 0)
+  counter <- 0
+  pb = txtProgressBar(min = 0, max = length(TSidList), initial = 0)
 
   for(thisTSid in TSidList){
     counter <- counter + 1
@@ -578,8 +741,8 @@ updateFromQC <- function(sTS,qcs,compilationName = "test",newVersion = "0.0.0"){
       }
     }
   }
- close(pb)
- # write_csv(x = as.data.frame(report),path = "~/GitHub/lipdverse/updateQc_log.csv")
+  close(pb)
+  # write_csv(x = as.data.frame(report),path = "~/GitHub/lipdverse/updateQc_log.csv")
   return(newTS)
 }
 
@@ -777,17 +940,17 @@ createQCdataFrame <- function(sTS,
     for(t in toRep){
       allYear[[t]] <- convertBP2AD(allAge[[t]])
     }
-
-    #has ages
-    nUniqueAges <- try(pullTsVariable(fsTS,"nUniqueAges"))
-    if(is(nUniqueAges,"try-error")){
-      nUniqueAges <- matrix(0,nrow = length(fsTS) )
-    }
-
-    hasChron <- as.numeric(nUniqueAges>0)
-    fsTS <- pushTsVariable(fsTS,"hasChron",hasChron,createNew = TRUE)
-
-    #has depth
+#
+#     #has ages
+#     nUniqueAges <- try(pullTsVariable(fsTS,"nUniqueAges"))
+#     if(is(nUniqueAges,"try-error")){
+#       nUniqueAges <- matrix(0,nrow = length(fsTS) )
+#     }
+#
+#     hasChron <- as.numeric(nUniqueAges>0)
+#     fsTS <- pushTsVariable(fsTS,"hasChron",hasChron,createNew = TRUE)
+#
+#     #has depth
 
 
     minYear <- sapply(allYear,min,na.rm=TRUE)
@@ -804,7 +967,7 @@ createQCdataFrame <- function(sTS,
 
   #get all names from TS
   allNames <- unique(unlist(sapply(fsTS,names)))
-
+  allNames <- allNames[!is.na(allNames)]
   #setup qc tibble
   out <- as.data.frame(matrix(NA,nrow = outRows,ncol = length(toPull)))
   names(out) <- toPull
@@ -814,7 +977,7 @@ createQCdataFrame <- function(sTS,
     if(length(n2p) == 0){n2p <- "missingVariable!!!"}
     if(n2p == "inCompilationBeta_struct"){#figure out wheter it's in the compilation or not
       vec <- inThisCompilation(TS = fsTS,compName = compilationName,compVers = compVersion)
-    }else if(any(n2p==allNames)){#regular check
+    }else if(any(purrr::map_lgl(n2p == allNames,isTRUE))){#regular check
       vec <- pullTsVariable(fsTS,n2p)
       #check to see if vec is authors
 
@@ -857,7 +1020,7 @@ checkfun <- function(cn,cv,compName,compVers){
   # if(is.na(cv)){# only look at comp name if version is NA
   #   bothMatch <- cn==compName
   # }else{
-    bothMatch <- (cn==compName & anycvm)
+  bothMatch <- (cn==compName & anycvm)
   #}
   #put NAs back in for compName
   incn <- which(is.na(cn))
@@ -890,7 +1053,7 @@ inThisCompilation <- function(TS,compName,compVers){
       }
     }
     allNames <- sort(unique(unlist(sapply(TS,names))))#get all names in TS
-      allVers <- allNames[grepl(pattern = "inCompilationBeta[0-9]+_compilationVersion",allNames)]
+    allVers <- allNames[grepl(pattern = "inCompilationBeta[0-9]+_compilationVersion",allNames)]
   }
 
   if(length(allComps) == 0){
@@ -942,7 +1105,7 @@ createNewQCSheet <- function(qcdf,qcName){
 #'
 #' @export
 #' @import readr googlesheets4 lubridate dplyr googledrive
-createNewProject <- function(templateID = "1JEm791Nhd4fUuyqece51CSlbR2A2I-pf8B0kFgwynug",project = "newProject", versionMetaId = "1OHD7PXEQ_5Lq6GxtzYvPA76bpQvN1_eYoFR0X80FIrY",googEmail = "nick.mckay2@gmail.com"){
+createNewProject <- function(templateID = "17XaSH1MNCtBI6ftEnTOHgy9C6mtXvYpR7JCNUNT-vI8",project = "newProject", versionMetaId = "1OHD7PXEQ_5Lq6GxtzYvPA76bpQvN1_eYoFR0X80FIrY",googEmail = "nick.mckay2@gmail.com"){
   #authorize google
   googlesheets4::gs4_auth(email = googEmail,cache = ".secret")
   googledrive::drive_auth(email = googEmail,cache = ".secret")
@@ -972,7 +1135,7 @@ createNewProject <- function(templateID = "1JEm791Nhd4fUuyqece51CSlbR2A2I-pf8B0k
   nvdf <- dplyr::bind_rows(versionDf,newRow)
   #readr::write_csv(nvdf,path = file.path(tempdir(),"versTemp.csv"))
   #googledrive::drive_update(media = file.path(tempdir(),"versTemp.csv"),file = googledrive::as_id(versionMetaId),name = "lipdverse versioning spreadsheet")
-  googlesheets4::write_sheet(nvdf,ss = versionMetaId,sheet = "versioning")
+  googlesheets4::write_sheet(nvdf,ss = versionMetaId,sheet = 1)
 
   #copy the template file
   #template <- getGoogleQCSheet(templateID)
@@ -991,6 +1154,49 @@ createNewProject <- function(templateID = "1JEm791Nhd4fUuyqece51CSlbR2A2I-pf8B0k
 
   return(dplyr::bind_rows(newQc,newLastUpdate))
 
+
+}
+
+updateDatasetsInCompilation <- function(qcId,databaseRef = NA,dsns = NA,dsids = NA){
+
+  if(all(!is.na(dsns)) & all(!is.na(dsids))){
+    stop("both dsns and dsids are included, pick one")
+  }
+  if(all(is.na(dsns)) & all(is.na(dsids))){
+    stop("you must include either the dsns or dsids to be included, pick one")
+  }
+
+  if(all(is.na(databaseRef))){
+    D <- loadLipdverseDatabase()
+    databaseRef <- createDatabaseReference(D)
+    databaseRef <<- databaseRef
+  }
+
+  dsic <- data.frame(dsn = databaseRef$dataSetName,dsid = databaseRef$datasetId, inComp = FALSE,instructions = "")
+
+  dsic$instructions[1] <- "Any datasets marked as FALSE will not be considered for the update, NA or TRUE will be considered."
+
+  if(all(!is.na(dsns))){
+    good <- which(dsic$dsn %in% dsns)
+    if(length(good) > 0){
+      dsic$inComp[good] <- TRUE
+      message(glue("Setting datasetsInCompilation tab to have {length(good)} marked datasets."))
+    }else{
+      stop("no matches found")
+    }
+  }
+
+  if(all(!is.na(dsids))){
+    good <- which(dsic$dsid %in% dsids)
+    if(length(good) > 0){
+      dsic$inComp[good] <- TRUE
+      message(glue("Setting datasetsInCompilation tab to have {length(good)} marked datasets."))
+    }else{
+      stop("no matches found")
+    }
+  }
+
+  write_sheet_retry(dsic,qcId,sheet = "datasetsInCompilation")
 
 }
 

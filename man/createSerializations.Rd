@@ -10,9 +10,10 @@ createSerializations(
   project,
   projVersion,
   remove.ensembles = TRUE,
-  matlabUtilitiesPath = "/Volumes/data/GitHub/LiPD-utilities/Matlab",
-  matlabPath = "/Applications/MATLAB_R2021b.app/bin/matlab",
-  python3Path = "/Users/nicholas/opt/anaconda3/envs/pyleo/bin/python3"
+  dontLoadEnsembles = FALSE,
+  matlabUtilitiesPath = "~/GitHub/LiPD-utilities/Matlab",
+  matlabPath = "/Applications/MATLAB_R2023a.app/bin/matlab",
+  python3Path = "/opt/anaconda3/envs/pyleo/bin/python3"
 )
 }
 \arguments{

@@ -197,9 +197,9 @@ plotCol <- function(thisTS,ind,timeCol = NA){
 
 
   if(is.null(thisTS[[ind]][[stringr::str_c(mode,"Data_proxy")]])){
-plot.name <- thisTS[[ind]][[stringr::str_c(mode,"Data_variableName")]]
+    plot.name <- stringr::str_c(thisTS[[ind]][[stringr::str_c(mode,"Data_variableName")]]," - ",thisTS[[ind]][[stringr::str_c(mode,"Data_TSid")]])
   }else{
-    plot.name <- stringr::str_c(thisTS[[ind]][[stringr::str_c(mode,"Data_proxy")]]," - ",thisTS[[ind]][[stringr::str_c(mode,"Data_variableName")]])
+    plot.name <- stringr::str_c(thisTS[[ind]][[stringr::str_c(mode,"Data_proxy")]]," - ",thisTS[[ind]][[stringr::str_c(mode,"Data_variableName")]]," - ",thisTS[[ind]][[stringr::str_c(mode,"Data_TSid")]])
   }
 
   dy.plot <- dygraph(df, main = plot.name,width = "100%") %>%
@@ -600,7 +600,7 @@ createDashboardRmd <- function(thisTS,i,project,webDirectory,version,chronTS = N
 
     mostRecentCompilations <- getMostRecentInCompilationsTs(thisTS)
 
-    primary <- try(as.logical(pullTsVariable(thisTS,"paleoData_primaryTimeseries"),silent = TRUE))
+    primary <- try(as.logical(pullTsVariable(thisTS,"paleoData_isPrimary"),silent = TRUE))
     if(is(primary,"try-error")){primary <- rep(NA,length(thisTS))}
 
     bestPlots <- ((!is.na(thisInterp) | !is.na(thisProxy) | !is.na(mostRecentCompilations) ) & !map_lgl(primary,isFALSE))

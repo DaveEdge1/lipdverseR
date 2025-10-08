@@ -4,10 +4,12 @@
 \alias{updateQueryCsv}
 \title{Update the lipdverse query sheet with updated data}
 \usage{
-updateQueryCsv(D)
+updateQueryCsv(D, append = TRUE)
 }
 \arguments{
 \item{D}{a multiLipd object}
+
+\item{append}{append the updated query sheet to existing? This will not replace non-updated files. Default = TRUE, only use FALSE if you want to overwrite the entire database with this multilipd object}
 }
 \description{
 Update the lipdverse query sheet with updated data

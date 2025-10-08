@@ -27,9 +27,8 @@ createProjectOverviewPage <- function(project,
 
 }
 
-
 #create project sidebar meta .html
-createProjectSidebarHtml <- function(project, vers, webdir = "/Volumes/data/Dropbox/lipdverse/html"){
+createProjectSidebarHtml <- function(project, vers, webdir = "/Users/nicholas/Dropbox/lipdverse/html"){
 
 
   vers_ <- str_replace_all(vers,"[.]","_")
@@ -132,13 +131,13 @@ createSidebarHtml <- function(L,webdir = "/Volumes/data/Dropbox/lipdverse/html")
 
   sidebarTitle <- glue::glue("{dsn} - v{vers}")
   dsidstr <- paste("Dataset Id:",dsid)
-  dsPath <- glue("https://lipdverse.org/data/{dsid}/{vers_}/")
-  lpdPath <- glue("{dsPath}/{dsn}.lpd")
-  lpdPathEns <- glue("{dsPath}/{dsn}-ensemble.lpd")
-  jsonPath <- glue("{dsPath}/{dsn}.jsonld")
-  csvName <- glue("{dsPath}/{dsn}.csv")
-  csvNameChron <- glue("{dsPath}/{dsn}-chron.csv")
-  lipdverseLpdPath <- glue("https://lipdverse.org/data/{dsid}/{vers_}/{dsn}.lpd")
+  dsPath <- glue::glue("https://lipdverse.org/data/{dsid}/{vers_}/")
+  lpdPath <- glue::glue("{dsPath}/{dsn}.lpd")
+  lpdPathEns <- glue::glue("{dsPath}/{dsn}-ensemble.lpd")
+  jsonPath <- glue::glue("{dsPath}/{dsn}.jsonld")
+  csvName <- glue::glue("{dsPath}/{dsn}.csv")
+  csvNameChron <- glue::glue("{dsPath}/{dsn}-chron.csv")
+  lipdverseLpdPath <- glue::glue("https://lipdverse.org/data/{dsid}/{vers_}/{dsn}.lpd")
 
   #add copy/paste code block
 
@@ -188,7 +187,7 @@ createSidebarHtml <- function(L,webdir = "/Volumes/data/Dropbox/lipdverse/html")
     str_c(glue('<pre><code>L <- lipdR::readLipd("{lipdverseLpdPath}")</code></pre>')) %>%
     str_c("\n") %>%
     str_c("            \n") %>%
-  str_c(glue('<p style="margin-left: 0px"><a href="http://lipd.net/playground?source={lipdverseLpdPath}">Edit LiPD file</a>',sep = "\n")) %>%
+    str_c(glue('<p style="margin-left: 0px"><a href="http://lipd.net/playground?source={lipdverseLpdPath}">Edit LiPD file</a>',sep = "\n")) %>%
     str_c("\n") %>%
     str_c("            \n") %>%
     str_c(glue('<p style="margin-left: 0px"><a href="{csvName}">Download PaleoData only (csv)</a>',sep = "\n")) %>%
@@ -522,13 +521,13 @@ createLipdverseMapHtml <- function(TS,webdir = "/Volumes/data/Dropbox/lipdverse/
 
 
 #create paleodata plots .html
-createPaleoDataPlotHtml <- function(L,webdir = "/Volumes/data/Dropbox/lipdverse/html"){
+createPaleoDataPlotHtml <- function(L,webdir = "~/Dropbox/lipdverse/html"){
 
   ts <- extractTs(L)
 
   dsid <- L$datasetId
   dsn <- L$dataSetName
-  vers <- sapply(L$changelog,"[[","version") %>% as.numeric_version() %>% max() %>% as.character()
+  vers <- getVersion(L)
   vers_ <- str_replace_all(vers,"[.]","_")
 
 
@@ -547,6 +546,13 @@ createPaleoDataPlotHtml <- function(L,webdir = "/Volumes/data/Dropbox/lipdverse/
   isxcol <- plotOrder %in% xcol
   plotOrder <- plotOrder[order(paleoNum,tableNum,-isxcol,-hasInterpretation)]#sort by table Number
 
+  #make sure to exclude ensembles
+  allDat <- pullTsVariable(ts,"paleoData_values")
+  ncols <- map_dbl(allDat,NCOL)
+  badCols <- which(ncols > 1)
+  if(length(badCols) > 0){
+    plotOrder <- plotOrder[!plotOrder %in% badCols]
+  }
 
   ##create csv output for download
   lengths <- sapply(ts,function(x){length(x$paleoData_values)})+1
@@ -570,7 +576,7 @@ createPaleoDataPlotHtml <- function(L,webdir = "/Volumes/data/Dropbox/lipdverse/
         }
       }
     }
-    print(names(outdf)[cc])
+    #print(names(outdf)[cc])
   }
   outnames <- names(outdf)
 
@@ -602,8 +608,9 @@ createPaleoDataPlotHtml <- function(L,webdir = "/Volumes/data/Dropbox/lipdverse/
 
 
   #check for non-numeric columns. Don't plot those.
-  nonnumeric <- which(purrr::map_lgl(ts,~ !is.numeric(.x$paleoData_values)))
-
+  nonnumeric <- purrr::map_lgl(ts,\(x) !is.numeric(x$paleoData_values))
+  #let's try to remove uncertainty columns
+  unc <- grepl(pattern = "uncertainty",x = thisVarNames,ignore.case = TRUE)
 
   if(length(graphOrder) > 6){#let's try to pick the best ones.
     thisInterp <- try(pullTsVariable(ts,"interpretation1_variable"),silent = TRUE)
@@ -614,25 +621,24 @@ createPaleoDataPlotHtml <- function(L,webdir = "/Volumes/data/Dropbox/lipdverse/
 
     mostRecentCompilations <- getMostRecentInCompilationsTs(ts)
 
-    primary <- try(as.logical(pullTsVariable(ts,"paleoData_primaryTimeseries")),silent = TRUE)
+    primary <- try(as.logical(pullTsVariable(ts,"paleoData_isPrimary")),silent = TRUE)
     if(is(primary,"try-error")){primary <- rep(NA,length(ts))}
 
-    bestPlots <- ((!is.na(thisInterp) | !is.na(thisProxy) | !is.na(mostRecentCompilations) ) & !map_lgl(primary,isFALSE))
+    bestPlots <- which((!is.na(thisInterp) | !is.na(thisProxy) | !is.na(mostRecentCompilations) ) & !map_lgl(primary,isFALSE) & !nonnumeric & !unc)
 
-    bestPlotsNoXCol <- bestPlots[-which(plotOrder %in% xcol)]
-
-    # nbp <- length(bestPlots)
-    # if(nbp < 6){
-    #   bestPlots <- c(bestPlots,setdiff(1:12,bestPlots))[1:6]
-    # }
-    graphOrder <- graphOrder[which(bestPlotsNoXCol)]
-  }
+    #remove any xcolumns if they exist
+      bestPlotsNoXCol <- setdiff(bestPlots,xcol)
 
 
-  if(any(graphOrder %in% nonnumeric)){
-    gind <- -which(graphOrder == nonnumeric)
-    graphOrder <- graphOrder[gind]
-    graphNames  <- graphNames[gind]
+    if(length(bestPlotsNoXCol) == 0){
+      graphOrder <- graphOrder[1:min(length(graphOrder),6)]
+    }else if(length(bestPlotsNoXCol) > 6){
+      graphOrder <- bestPlotsNoXCol[1:6]
+    }else{
+      graphOrder <- bestPlotsNoXCol
+    }
+      graphNames <- names(outdf)[graphOrder]
+
   }
 
 
@@ -660,7 +666,7 @@ createPaleoDataPlotHtml <- function(L,webdir = "/Volumes/data/Dropbox/lipdverse/
 
 
 
-  for(cc in 1:length(graphOrder)){#for each column..
+  for(cc in seq_along(graphOrder)){#for each column..
     #setup a new column in the markdown
     thisRmd <- str_c(thisRmd,str_c("### ",graphNames[cc]),sep = "\n") %>%
       str_c("```{r, echo = FALSE,warning = FALSE,message = FALSE}",sep = "\n") %>%
@@ -817,10 +823,10 @@ createWebComponents <- function(L,webdir = "/Volumes/data/Dropbox/lipdverse/html
 
 
 #create iframe html for data page (or just lipdverse)
-createDataWebPage <- function(L,webdir = "/Volumes/data/Dropbox/lipdverse/html"){
+createDataWebPage <- function(L,webdir = "~/Dropbox/lipdverse/html"){
   dsid <- L$datasetId
   dsn <- L$dataSetName
-  vers <- sapply(L$changelog,"[[","version") %>% as.numeric_version() %>% max() %>% as.character()
+  vers <- as.character(getVersion(L))
   vers_ <- str_replace_all(vers,"[.]","_")
 
   dsPath <- glue("https://lipdverse.org/data/{dsid}/{vers_}/")
@@ -846,6 +852,9 @@ createDataWebPage <- function(L,webdir = "/Volumes/data/Dropbox/lipdverse/html")
     str_replace("paleoDataGraphsUrlHere",paleoUrl) %>%
     str_replace("chronDataGraphsUrlHere",chronUrl)
 
+  if(!dir.exists(file.path(webdir,"data",dsid,vers_))){
+    dir.create(file.path(webdir,"data",dsid,vers_))
+  }
   readr::write_file(template,file = file.path(webdir,"data",dsid,vers_,paste0(dsn,".html")))
 
   #remove ensembles if present
@@ -855,7 +864,8 @@ createDataWebPage <- function(L,webdir = "/Volumes/data/Dropbox/lipdverse/html")
     writeLipd(L,path = file.path(webdir,"data",dsid,vers_,paste0(L$dataSetName,"-ensemble.lpd")))
     writeLipd(Lne,path = file.path(webdir,"data",dsid,vers_))
     writeLipd(Lne,path = file.path(webdir,"data",dsid,vers_),jsonOnly = TRUE)
-    system(glue::glue("cp {file.path(webdir,'data',dsid,vers_,dsn)}-ensemble.lpd {file.path(webdir,'data',dsid,vers_)}/lipd-ensemble.lpd"))
+    suc <- file.copy(file.path(webdir,'data',dsid,vers_,paste0(dsn,"-ensemble.lpd")),
+                     file.path(webdir,'data',dsid,vers_,paste0("lipd-ensemble",".lpd")))
 
   }else{
     writeLipd(L,path = file.path(webdir,"data",dsid,vers_))
@@ -872,12 +882,14 @@ createDataWebPage <- function(L,webdir = "/Volumes/data/Dropbox/lipdverse/html")
 
   #write changelog html
   clpath <- file.path(webdir,'data',dsid,vers_,'changelog.md')
-  clmd <- createMarkdownChangelog(L)
+  clmd <- lipdR::createMarkdownChangelog(L)
   readr::write_file(clmd,file = clpath)
   rmarkdown::render(clpath)
 
   #copy to index
-  system(glue::glue("cp {file.path(webdir,'data',dsid,vers_,paste0(dsn,'.html'))} {file.path(webdir,'data',dsid,vers_)}/index.html"))
+  #system(glue::glue("cp {file.path(webdir,'data',dsid,vers_,paste0(dsn,'.html'))} {file.path(webdir,'data',dsid,vers_)}/index.html"))
+  file.copy(file.path(webdir,'data',dsid,vers_,paste0(dsn,'.html')),
+            file.path(webdir,'data',dsid,vers_,"index.html"))
 
   #write dsid redirect html
   redirect <- readr::read_file(file.path(webdir,"redirectTemplate.html")) %>%
@@ -886,8 +898,11 @@ createDataWebPage <- function(L,webdir = "/Volumes/data/Dropbox/lipdverse/html")
   readr::write_file(redirect,file = file.path(webdir,"data",dsid,"index.html"))
 
   #copy lipd to generic
-  system(glue::glue("cp {file.path(webdir,'data',dsid,vers_,dsn)}.lpd {file.path(webdir,'data',dsid,vers_)}/lipd.lpd"))
-  system(glue::glue("cp {file.path(webdir,'data',dsid,vers_,dsn)}.jsonld {file.path(webdir,'data',dsid,vers_)}/lipd.jsonld"))
+  suc <- file.copy(file.path(webdir,'data',dsid,vers_,paste0(dsn,".lpd")),
+                   file.path(webdir,'data',dsid,vers_,paste0("lipd",".lpd")))
+  suc <- file.copy(file.path(webdir,'data',dsid,vers_,paste0(dsn,".jsonld")),
+                   file.path(webdir,'data',dsid,vers_,paste0("lipd",".jsonld")))
+
 
 }
 
@@ -895,7 +910,7 @@ createDataWebPage <- function(L,webdir = "/Volumes/data/Dropbox/lipdverse/html")
 updateDataWebPageForCompilation <- function(L,webdir = "/Volumes/data/Dropbox/lipdverse/html"){
   dsid <- L$datasetId
   dsn <- L$dataSetName
-  vers <- sapply(L$changelog,"[[","version") %>% as.numeric_version() %>% max() %>% as.character()
+  vers <- L$datasetVersion
   vers_ <- str_replace_all(vers,"[.]","_")
 
   if(!file.exists(file.path(webdir,"data",dsid,"index.html"))){
@@ -918,15 +933,22 @@ updateDataWebPageForCompilation <- function(L,webdir = "/Volumes/data/Dropbox/li
     writeLipd(L,path = file.path(webdir,"data",dsid,vers_,paste0(L$dataSetName,"-ensemble.lpd")))
     writeLipd(Lne,path = file.path(webdir,"data",dsid,vers_))
     writeLipd(Lne,path = file.path(webdir,"data",dsid,vers_),jsonOnly = TRUE)
-    system(glue::glue("cp {file.path(webdir,'data',dsid,vers_,dsn)}-ensemble.lpd {file.path(webdir,'data',dsid,vers_)}/lipd-ensemble.lpd"))
+    #system(glue::glue("cp {file.path(webdir,'data',dsid,vers_,dsn)}-ensemble.lpd {file.path(webdir,'data',dsid,vers_)}/lipd-ensemble.lpd"))
+    file.copy(file.path(webdir,'data',dsid,vers_,paste0(dsn,"-ensemble.lpd")),
+              file.path(webdir,'data',dsid,vers_,"lipd-ensemble.lpd"))
   }else{
     #update the LiPD files
     writeLipd(L,path = file.path(webdir,"data",dsid,vers_))
     writeLipd(L,path = file.path(webdir,"data",dsid,vers_),jsonOnly = TRUE)
   }
 
-  system(glue::glue("cp {file.path(webdir,'data',dsid,vers_,dsn)}.lpd {file.path(webdir,'data',dsid,vers_)}/lipd.lpd"))
-  system(glue::glue("cp {file.path(webdir,'data',dsid,vers_,dsn)}.jsonld {file.path(webdir,'data',dsid,vers_)}/lipd.jsonld"))
+
+  #system(glue::glue("cp {file.path(webdir,'data',dsid,vers_,dsn)}.lpd {file.path(webdir,'data',dsid,vers_)}/lipd.lpd"))
+  file.copy(file.path(webdir,'data',dsid,vers_,paste0(dsn,".lpd")),
+            file.path(webdir,'data',dsid,vers_,"lipd.lpd"))
+  #system(glue::glue("cp {file.path(webdir,'data',dsid,vers_,dsn)}.jsonld {file.path(webdir,'data',dsid,vers_)}/lipd.jsonld"))
+  file.copy(file.path(webdir,'data',dsid,vers_,paste0(dsn,".jsonld")),
+            file.path(webdir,'data',dsid,vers_,"lipd.jsonld"))
 }
 
 
@@ -992,8 +1014,8 @@ getInventory <- function(lipdDir,googEmail){
   tries <- 0
   while(TRUE){
     smatch <- try(R.utils::withTimeout({googledrive::drive_find(pattern = invName,n_max = 1)},
-                                      timeout = 15,
-                                      onTimeout = "error"),silent = TRUE)
+                                       timeout = 15,
+                                       onTimeout = "error"),silent = TRUE)
 
     if(is(smatch,"try-error")){
       tries <- tries + 1
@@ -1138,7 +1160,14 @@ write_json_timeseries_files <- function(L,webdir){
     tmt <- dplyr::filter(ts,tableNumber == m)
 
     #find primary age column
-    ac <- dplyr::filter(tmt,paleoData_primaryAgeColumn)
+    if("paleoData_primaryAgeColumn" %in% names(tmt)){
+      ac <- dplyr::filter(tmt,paleoData_primaryAgeColumn)
+    }else if("paleoData_isPrimary" %in% names(tmt)){
+      ac <- dplyr::filter(tmt,paleoData_isPrimary &
+                            (tolower(paleoData_variableName) == "age" | tolower(paleoData_variableName) == "year"))
+    }else{
+      ac <- dplyr::filter(tmt,tolower(paleoData_variableName) == "age")
+    }
 
     if(nrow(ac) >= 1){
       ac_data <- ac$paleoData_values[[1]]
@@ -1161,9 +1190,11 @@ write_json_timeseries_files <- function(L,webdir){
 
     }
 
-    ac_name <- ac$paleoData_variableName[[1]]
-    ac_units <- ac$paleoData_units[[1]]
-    ac_tsid <- ac$paleoData_TSid[[1]]
+    if(nrow(ac) >= 1){
+      ac_name <- ac$paleoData_variableName[[1]]
+      ac_units <- ac$paleoData_units[[1]]
+      ac_tsid <- ac$paleoData_TSid[[1]]
+    }
 
     #now get data for each TSid
     for(i in 1:nrow(tmt)){
