@@ -201,7 +201,7 @@ createProjectChangelog <- function(Dold,
       mdcl <- mdcl %>%
         str_c(glue::glue("## {Dchanged[[d]]$dataSetName}")) %>%
         str_c("\n\n") %>%
-        str_c(createSingleMarkdownChangelog(tcl)) %>%
+        str_c(lipdR::createSingleMarkdownChangelog(tcl)) %>%
         str_c("\n\n")
 
       # if(is(tmdcl,"try-error")){

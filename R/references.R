@@ -83,6 +83,12 @@ createBibtexEntry <- function(pub){
         pubdf$year <- "Missing Year"
       }
 
+      if(pubdf$bibtype == "Article"){
+        if(!goodEntry(pubdf$journal)){
+          pubdf$journal <- "Missing Journal"
+        }
+      }
+
       bibEntry <- RefManageR::as.BibEntry(pubdf)
     }
   }
@@ -131,6 +137,7 @@ updateGoogleReferencesFromLipd <- function(allRefTib){
   if(any(duplicated(gs$citekey))){
     stop("there are duplicate citekeys, please fix in the google sheet and try again")
   }
+
   if(nrow(newRefs) > 0){
     forGoogle <- bind_rows(gs,newRefs)
     googlesheets4::gs4_auth(email = "nick.mckay2@gmail.com",cache = ".secret")
@@ -174,16 +181,20 @@ createBibDfFromLipd <- function(D){
     allDsn <-  D$dataSetName
     allDsid <- D$datasetId
   }else{
-    giant <- purrr::map(D,getDatasetBibtex,.progress = TRUE)
+    if(length(D) < 500){
+      giant <- purrr::map(D,getDatasetBibtex,.progress = TRUE)
+    }else{
+      future::plan(future::sequential)
+      future::plan(future::multisession, workers = 16)
+      giant <- furrr::future_map(D,getDatasetBibtex,.progress = TRUE)
+    }
 
-  #remove empty
+    #remove empty
+    # allRefTib <- as.data.frame(giant[[1]][1])
+    # allRefTib$dataSetName <- names(giant)[1]
 
-
-  allRefTib <- as.data.frame(giant[[1]][1])
-  allRefTib$dataSetName <- names(giant)[1]
-
-  allDsn <- map_chr(D,"dataSetName")
-  allDsid <- map_chr(D,"datasetId")
+    allDsn <- map_chr(D,"dataSetName")
+    allDsid <- map_chr(D,"datasetId")
   }
 
   for(i in 1:length(giant)){
@@ -191,6 +202,9 @@ createBibDfFromLipd <- function(D){
     for(j in 1:length(giant[[i]])){
       newdf <- try(as.data.frame(giant[[i]][j]),silent = TRUE)
       if(!is(newdf,"try-error")){
+        if(is(newdf[[1]],"bibentry") & j == 1){
+          newdf <- try(as.data.frame(giant[[i]]),silent = TRUE)
+        }
         newdf$dataSetName <- names(giant)[i]
         newdf$citekey <- rownames(newdf)
 
@@ -200,7 +214,22 @@ createBibDfFromLipd <- function(D){
         }else{
           stop("This is bad")
         }
-        allRefTib <-  dplyr::bind_rows(allRefTib,newdf)
+
+        if(!"bibtype" %in% names(newdf)){
+          next
+        }
+
+        if(!exists("allRefTib")){
+          allRefTib <- newdf
+        }else{
+          newAllRefTib <-  try(dplyr::bind_rows(allRefTib,newdf))
+          if(is(newAllRefTib,"try-error")){
+            stop("bad")
+          }else{
+            allRefTib <- newAllRefTib
+          }
+        }
+
       }
     }
   }
@@ -404,6 +433,10 @@ createBibTable <- function(ts,smallBib){
   #  ts$datasetVersion <- map_chr(mD,getVersion)
 
   bibjson <- getJsonBib()
+
+  if(!"paleoData_proxy" %in% names(ts)){
+    ts$paleoData_proxy <- NA
+  }
 
   smallTable <- ts %>%
     group_by(datasetId) %>%

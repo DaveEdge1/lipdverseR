@@ -328,6 +328,8 @@ checkBaseConflictsQcSheet <- function(qc){
 
   #set up all1
   all1 <- FALSE
+  all2 <- FALSE
+  all3 <- FALSE
 
 
   for(thisName in namesToCheck){
@@ -350,6 +352,10 @@ checkBaseConflictsQcSheet <- function(qc){
 
         if(all1){
           wg <- 1
+        }else if(all2){
+          wg <- 2
+        }else if(all3){
+          wg <- 3
         }else{
           wg <- askUser("Which option do you prefer?")
         }
@@ -366,6 +372,10 @@ checkBaseConflictsQcSheet <- function(qc){
         if(newEntry){
           if(wg == "all1"){#this will enter all choices as 1. Not a bad idea if the sheet is sorted.
             all1 <- TRUE
+          }else if(wg == "all2"){#this will enter all choices as 2. Not a bad idea if you know the QC sheet is
+            all2 <- TRUE
+          }else if(wg == "all3"){#this will enter all choices as 3. Not a bad idea if you know the data are better
+            all3 <- TRUE
           }else{
 
 

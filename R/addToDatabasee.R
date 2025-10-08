@@ -88,11 +88,13 @@ addLipdToDatabase <- function(L,
     databaseRef <<- databaseRef
 
   }else if(L$dataSetName %in% databaseRef$dataSetName){#if the datasetId doesn't match, but the name does, we need to ask
+    message(L$dataSetName)
     input <- geoChronR::askUser("This dataSetName is already present in the database, but with a different datasetId. Do you want to:\n
 
 1. Change the new datasetId to match the old one and then update (usually a good idea)\n
 2. Overwrite the old file in the database with the new one (usually a bad idea)\n
-3. Abort\n")
+3. Change the dataSetName of the new file, if it's a legitimately new file (depends)\n
+4. Abort\n")
     if(input == "1"){
       wdsn <- which(databaseRef$dataSetName == L$dataSetName)
       if(length(wdsn) > 1){
@@ -120,6 +122,21 @@ addLipdToDatabase <- function(L,
 
       #add to databaseRef
 
+      databaseRef <- dplyr::bind_rows(databaseRef,tibble::tibble(datasetId = L$datasetId, dataSetName = L$dataSetName))
+      databaseRef <<- databaseRef
+    }
+    if(input == "3"){
+      while(L$dataSetName %in% databaseRef$dataSetName){
+        L$dataSetName <- geoChronR::askUser("What should the new dataSetName be?")
+        if(L$dataSetName %in% databaseRef$dataSetName){
+          message("The name still matches an existing one. Try again.")
+        }
+      }
+
+      #looks like a new dataset, create a blank changelog
+      cl <- createChangelog(L,L)
+      res <- "Added"
+      #add to databaseRef
       databaseRef <- dplyr::bind_rows(databaseRef,tibble::tibble(datasetId = L$datasetId, dataSetName = L$dataSetName))
       databaseRef <<- databaseRef
     }

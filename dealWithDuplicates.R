@@ -1,5 +1,12 @@
 #deal with duplicated TSids
+whichDup <- which(duplicated(ts$paleoData_TSid))
 dupTsids <- ts$paleoData_TSid[whichDup]
+
+wd_dsns <- filter(ts,paleoData_TSid %in% dupTsids) |>
+  select(dataSetName) |>
+  unique() |> unlist()
+
+test <- readLipd(paste0("~/Dropbox/lipdverse/database/",wd_dsns,".lpd"))
 
 for(i in 1:length(dupTsids)){
   dsns <- ts$dataSetName[ts$paleoData_TSid == dupTsids[i]]
@@ -16,23 +23,37 @@ for(i in 1:length(dupTsids)){
     if(!any(ts1$paleoData_TSid %in% ts2$paleoData_TSid)){
       next
     }
+    mrc1 <- unique(getMostRecentInCompilationsTs(TS1))
+    mrc2 <- unique(getMostRecentInCompilationsTs(TS2))
 
 
-    message("dataset 1 compilations:")
-    print(unique(getMostRecentInCompilationsTs(TS1)))
+    #if(FALSE){
+    if(any(grepl("iso2k",mrc1)) & all(is.na(mrc2))){
+      wd <- 2
+      appendWhat <- "namDendro"
 
-    message("dataset 2 compilations:")
-    print(unique(getMostRecentInCompilationsTs(TS2)))
+    }else if(any(grepl("iso2k",mrc2)) & all(is.na(mrc1))){
+      wd <- 1
+      appendWhat <- "namDendro"
 
-    #which TSids are duplicated?
-    wd1 <- which(ts1$paleoData_TSid %in% ts2$paleoData_TSid)
-    wd2 <- which(ts2$paleoData_TSid %in% ts1$paleoData_TSid)
+    }else{
 
-    wd <- askUser("To which dataset should we append 'dup' to the TSid")
-    appendWhat <- askUser("What should we append? Leave blank for 'dup'")
+      message(glue("{L1$dataSetName} - dataset 1 compilations:"))
+      message(unique(getMostRecentInCompilationsTs(TS1)))
+
+      message(glue("{L2$dataSetName} - dataset 2 compilations:"))
+      message(unique(getMostRecentInCompilationsTs(TS2)))
+
+      #which TSids are duplicated?
+      wd1 <- which(ts1$paleoData_TSid %in% ts2$paleoData_TSid)
+      wd2 <- which(ts2$paleoData_TSid %in% ts1$paleoData_TSid)
+
+      wd <- askUser("To which dataset should we append 'dup' to the TSid")
+      appendWhat <- askUser("What should we append? Leave blank for 'dup'")
+    }
 
     if(appendWhat == ""){
-      appendWhat <- "dup"
+      appendWhat <- "namDendro"
     }
 
     if(as.numeric(wd) == 1){

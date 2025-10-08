@@ -75,7 +75,7 @@ for(f in files){
     # Check the list of semantic versions
     result <- check_sequential_increments(versions_semver)
 
-    if(!result$is_sequential){
+    while(!result$is_sequential){
       for(mv in 1:length(result$probable_missing_version)){
         tmv <- as.character(result$probable_missing_version[[mv]]) |>
           stringr::str_replace_all("\\.","_")
@@ -93,6 +93,18 @@ for(f in files){
           }
         }
       }
+      #check again
+      ad <- list.files(f, pattern = versionPattern, full.names = FALSE) |>
+        stringr::str_replace_all("_",".") |>
+        as.numeric_version() |>
+        sort() |>
+        as.character()
+
+      #test if the list of versions is sequential
+      versions_semver <- semver::parse_version(ad)
+
+      # Check the list of semantic versions
+      result <- check_sequential_increments(versions_semver)
     }
   }
 }

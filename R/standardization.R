@@ -205,7 +205,7 @@ standardizeLipd <- function(L,standardTables){
   }
 
   if(changeMade){
-    L <- as.lipd(tts)
+    L <- purrr::transpose(tts) |> collapseTs(force = TRUE) #change back to L <- as.lipd(tts)
     cl <- createChangelog(Lold = Lo,Lnew = L)
     L <- updateChangelog(L = L,
                          changelog = cl,

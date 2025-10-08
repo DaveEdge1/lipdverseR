@@ -8,7 +8,10 @@ dupDsid <- dsid[which(duplicated(dsid))]
 
 changed <- data.frame(dsn = "start", oldDsid = "start", newDsid = "start")
 
+# ask user to append 'dup' to datasetId --------------------------------
+
 for(i in dupDsid){
+  
   dupDsn <- dsn[which(dsid == i)]
 
   NL1 <- D[[dupDsn[[1]]]]
@@ -83,7 +86,7 @@ for(r in 1:nrow(dsns)){
     }
   }
 
-  }
+ 
 }
 
 

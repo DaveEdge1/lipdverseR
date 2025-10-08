@@ -20,12 +20,12 @@ assignPrimaryTimeColumns <- function(L,update.changelog = TRUE){
 
 
 
-  #how many measurement tables:
+  #how many measurement or summary tables:
   at <- unique(ts$tableNumber)
   ap <- unique(ts$paleoNumber)
 
   ao <- dplyr::select(ts,paleoNumber,tableNumber,tableType) %>%
-    dplyr::filter(tableType == "meas") %>%
+    dplyr::filter(tableType == "meas" | tableType == "summ") %>%
     group_by(paleoNumber,tableNumber) %>%
     summarize(count = n()) %>%
     filter(count > 0)

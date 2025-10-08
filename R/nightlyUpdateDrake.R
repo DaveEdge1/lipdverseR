@@ -68,8 +68,10 @@ updateNeeded <- function(project,webDirectory,lipdDir,qcId,versionMetaId = "1OHD
   qcUpdate <- googleDriveUpdateTime(qcId)
 
   qcNeedsUpdating <- TRUE
-  if(lastUpdate > qcUpdate){
-    qcNeedsUpdating <- FALSE
+  if(!is.na(lastUpdate)){
+    if(lastUpdate > qcUpdate){
+      qcNeedsUpdating <- FALSE
+    }
   }
 
   if(qcNeedsUpdating | filesNeedUpdating){
@@ -193,7 +195,7 @@ assignVariablesFromList <- function(params,env = parent.env(environment())){
 #' @param restrictWebpagesToCompilation
 #' @param qcStandardizationCheck
 #' @param serialize
-#' @param projVersion
+#' @param projVersion in "a_b_c" format
 #' @param firstRun Is this the first run for this compilation?
 #' @param dontLoadEnsemble
 #' @param updateDatasetsInCompilationFromInThisCompilation
@@ -247,18 +249,21 @@ checkIfUpdateNeeded <- function(params){
   for(i in 1:length(params)){
     assign(names(params)[i],params[[i]])
   }
-
+  if(firstRun){#then we need it!
+    return(TRUE)
+  }
 
   if(is.na(projVersion)){#skip check if new version is specified
     #check if update is necessary
     toUpdate <- updateNeeded(project,webDirectory,lipdDir,qcId,googEmail = googEmail)
-
-    if(!toUpdate){
-      return("No update needed")
-    }else{
-      return("Update needed")
-    }
+  }else{
+    toUpdate <- TRUE
   }
+  toUpdate <- TRUE
+  if(!toUpdate){
+    stop("It doesn't look like an update is needed")
+  }
+  return(toUpdate)
 }
 
 
@@ -394,17 +399,17 @@ loadInUpdatedData <- function(params){
   #make sure that primary chronologies are named appropriately
   D <- purrr::map(D,renamePrimaryChron)
 
-  if(standardizeTerms){
-    D <- purrr::map(D,cleanOriginalDataUrl)
-    D <- purrr::map(D,hasDepth)
-    D <- purrr::map(D,nUniqueAges)
-    D <- purrr::map(D,nGoodAges)
-    D <- purrr::map(D,nOtherAges)
-    # D <- purrr::map(D,fixExcelIssues)
-    D <- purrr::map(D,standardizeChronVariableNames)
-  }
+  # if(standardizeTerms){
+  #   D <- purrr::map(D,cleanOriginalDataUrl)
+  #   D <- purrr::map(D,hasDepth)
+  #   D <- purrr::map(D,nUniqueAges)
+  #   D <- purrr::map(D,nGoodAges)
+  #   D <- purrr::map(D,nOtherAges)
+  #   # D <- purrr::map(D,fixExcelIssues)
+  #   D <- purrr::map(D,standardizeChronVariableNames)
+  # }
 
-  #1a. Screen by some criterion...
+  #1a. Screen by some criteria...
 
   #check for TSid
   TS <- lipdR::extractTs(D)
@@ -427,13 +432,13 @@ loadInUpdatedData <- function(params){
   #create grouping terms for later standardization
 
   #TO DO!# remove entries that don't fall into the groups/lumps!
-  if(standardizeTerms){
-    #Do some cleaning
-    TS <- standardizeTsValues(TS)
-    TS <- fix_pubYear(TS)
-    TS <- fixKiloyearsTs(TS)
-    TS <- purrr::map(TS,removeEmptyInterpretationsFromTs)
-  }
+  # if(standardizeTerms){
+  #   #Do some cleaning
+  #   TS <- standardizeTsValues(TS)
+  #   TS <- fix_pubYear(TS)
+  #   TS <- fixKiloyearsTs(TS)
+  #   TS <- purrr::map(TS,removeEmptyInterpretationsFromTs)
+  # }
 
   #get some relevant information
   TSid <- lipdR::pullTsVariable(TS,"paleoData_TSid")
@@ -512,7 +517,7 @@ getQcInfo <- function(params,data){
 #' @return
 #' @export
 standardizeQCInfo <- function(params,data){
-
+  print("here")
   #assignVariablesFromList(params)
   for(i in 1:length(params)){
     assign(names(params)[i],params[[i]])
@@ -727,6 +732,9 @@ standardizeQCInfo <- function(params,data){
     projVersion <- tickVersion(project,qcIc,tsIc,googEmail = googEmail)
   }
 
+  if(all(is.na(projVersion))){
+    stop("projVersion should not be NA at this point")
+  }
 
   #setup new version
   if(!dir.exists(file.path(webDirectory,project))){
@@ -792,7 +800,9 @@ createQcFromFile <- function(params,data){
 
   if(!exists("sTS")){
     sTS <- splitInterpretationByScope(TS)
+    data$sTS <- sTS
   }
+
 
   #2. Create a new qc sheet from files
   qcC <- createQCdataFrame(sTS,templateId = qcId,ageOrYear = ageOrYear,compilationName = project,compVersion = lastProjVersion)
@@ -835,6 +845,7 @@ mergeQcSheets <- function(params,data){
   for(i in 1:length(data)){
     assign(names(data)[i],data[[i]])
   }
+
   #4. Load in the old QC sheet (from last update), and merge with new ones
   rosetta <- lipdverseR::rosettaStone()
   qcA <- readr::read_csv(file.path(webDirectory,project,"lastUpdate.csv"),guess_max = Inf) %>%
@@ -941,8 +952,6 @@ mergeQcSheets <- function(params,data){
   #this should fix conflicts that shouldnt exist
   #qc <- resolveDumbConflicts(qc)
 
-
-
   data$qc <- qc
   #data$qcA <- qcA
   return(data)
@@ -977,7 +986,12 @@ updateTsFromMergedQc <- function(params,data){
     assign(names(data)[i],data[[i]])
   }
 
+  if(!exists("sTS")){
+    sTS <- splitInterpretationByScope(data$TS)
+  }
+
   rm("data")
+
 
   #5. Update sTS from merged qc
   #p <- profvis({nsTS <- updateFromQC(sTS,qc,project,projVersion)},interval = 1)
@@ -996,7 +1010,8 @@ updateTsFromMergedQc <- function(params,data){
     writeValidationReportToQCSheet(validationReport,qcId)
   }
 
-  if(standardizeTerms){#To do: #make this its own function
+  if(standardizeTerms){#this is probably obsolete now
+    #To do: #make this its own function
     #proxy lumps
     groupFrom <- c("paleoData_proxy","paleoData_inferredMaterial","interpretation1_variable","interpretation2_variable","interpretation3_variable","interpretation4_variable","interpretation5_variable","interpretation6_variable","interpretation7_variable","interpretation8_variable")
 
@@ -1163,7 +1178,13 @@ createDataPages <- function(params,data){
       }
     }
     print(glue::glue("Creating {length(tc)} new data webpages..."))
-    purrr::walk(tc,quietly(createDataWebPage),webdir = webDirectory,.progress = TRUE)
+    if(length(tc) < 50){
+      purrr::walk(tc,quietly(createDataWebPage),webdir = webDirectory,.progress = TRUE)
+    }else{
+      future::plan(future::sequential) #reset first
+      future::plan(future::multisession, workers = 16)
+      furrr::future_walk(tc,quietly(createDataWebPage),webdir = webDirectory,.progress = TRUE)
+    }
   }
 
   #if  changes
@@ -1180,7 +1201,13 @@ createDataPages <- function(params,data){
       }
     }
     print(glue::glue("Updating {length(tu)} data webpages..."))
-    purrr::walk(tu,quietly(updateDataWebPageForCompilation),webdir = webDirectory,.progress = TRUE)
+    if(length(tu) < 50){
+      purrr::walk(tu,quietly(updateDataWebPageForCompilation),webdir = webDirectory,.progress = TRUE)
+    }else{
+      future::plan(future::sequential) #reset first
+      future::plan(future::multisession, workers = 16)
+      furrr::future_walk(tu,quietly(updateDataWebPageForCompilation),webdir = webDirectory,.progress = TRUE)
+    }
   }
 
 
@@ -1238,6 +1265,10 @@ createProjectWebpages <- function(params,data){
   tcdf <- data.frame(dsid = map_chr(nDic,"datasetId"),
                      dsn = map_chr(nDic,"dataSetName"),
                      vers = map_chr(nDic,getVersion))
+
+  if(nrow(tcdf) == 0){
+    stop("It looks like there are 0 datasets in the compilation. This is probably bad. Check the inThisCompilation column in the QC sheet")
+  }
 
   #create all the project shell sites
   print(glue::glue("Creating {nrow(tcdf)} project shell sites"))
@@ -1419,7 +1450,7 @@ createProjectWebpages <- function(params,data){
   DF <- nDic
 
   if(serialize){
-    try(createSerializations(D = DF,webDirectory,project,projVersion,dontLoadEnsemble = dontLoadEnsembles),silent = FALSE)
+    try(createSerializations(D = DF,webDirectory,project,projVersion,dontLoadEnsemble = dontLoadEnsemble),silent = FALSE)
     if(updateLipdverse){
       try(createSerializations(D = LV,webDirectory,"lipdverse","current_version"),silent = FALSE)
     }
@@ -1812,6 +1843,7 @@ createSerializations <- function(D,
                                  projVersion,
                                  remove.ensembles = TRUE,
                                  dontLoadEnsemble = FALSE,
+                                 rOnly = FALSE,
                                  matlabUtilitiesPath = "~/GitHub/LiPD-utilities/Matlab",
                                  matlabPath = "/Applications/MATLAB_R2023a.app/bin/matlab",
                                  python3Path="/opt/anaconda3/envs/pyleo/bin/python3"){
@@ -1833,12 +1865,7 @@ createSerializations <- function(D,
   #sTS <- splitInterpretationByScope(TS)
   save(list = c("D","ts"),file = file.path(webDirectory,project,projVersion,stringr::str_c(project,projVersion,".RData")))
 
-  #update compilation metadata
-  compMd <- getAllCompilationsAndVersions(ts)
-  jsonMeta <- jsonlite::toJSON(compMd,pretty = TRUE,auto_unbox = TRUE)
-  write(jsonMeta, file=file.path(webDirectory,"lipdverse","compilationMetadata.json"))
-  upCmd <- glue::glue('rsync -v {file.path(webDirectory,"lipdverse","*")} npm4@linux.cefns.nau.edu:/www/cefns.nau.edu/seses/lipdverse/lipdverse')
-  system(upCmd)
+
 
   #write files to a temporary directory
   lpdtmp <- file.path(tempdir(),"lpdTempSerialization")
@@ -1871,40 +1898,48 @@ createSerializations <- function(D,
 
 
 
+  if(!rOnly){
+    #matlab
+    mfile <- stringr::str_c("addpath(genpath('",matlabUtilitiesPath,"'));\n") %>%
+      stringr::str_c("D = readLiPD('",lpdtmp,"');\n") %>%
+      #stringr::str_c("TS = extractTs(D);\n") %>%
+      #stringr::str_c("sTS = splitInterpretationByScope(TS);\n") %>%
+      stringr::str_c("save ",file.path(webDirectory,project,projVersion,stringr::str_c(project,projVersion,".mat")),' D\n') %>%
+      stringr::str_c("exit")
 
-  #matlab
-  mfile <- stringr::str_c("addpath(genpath('",matlabUtilitiesPath,"'));\n") %>%
-    stringr::str_c("D = readLiPD('",lpdtmp,"');\n") %>%
-    #stringr::str_c("TS = extractTs(D);\n") %>%
-    #stringr::str_c("sTS = splitInterpretationByScope(TS);\n") %>%
-    stringr::str_c("save ",file.path(webDirectory,project,projVersion,stringr::str_c(project,projVersion,".mat")),' D\n') %>%
-    stringr::str_c("exit")
+    #write the file
+    readr::write_file(mfile,path = file.path(webDirectory,project,projVersion,"createSerialization.m"))
 
-  #write the file
-  readr::write_file(mfile,path = file.path(webDirectory,project,projVersion,"createSerialization.m"))
-
-  #run the file
-  try(system(stringr::str_c(matlabPath," -nodesktop -nosplash -nodisplay -r \"run('",file.path(webDirectory,project,projVersion,"createSerialization.m"),"')\"")))
+    #run the file
+    try(system(stringr::str_c(matlabPath," -nodesktop -nosplash -nodisplay -r \"run('",file.path(webDirectory,project,projVersion,"createSerialization.m"),"')\"")))
 
 
-  #Python
-  pyfile <- "import lipd\n" %>%
-    stringr::str_c("import pickle\n") %>%
-    stringr::str_c("D = lipd.readLipd('",lpdtmp,"/')\n") %>%
-    stringr::str_c("TS = lipd.extractTs(D)\n") %>%
-    stringr::str_c("filetosave = open('",file.path(webDirectory,project,projVersion,stringr::str_c(project,projVersion,".pkl'")),",'wb')\n") %>%
-    stringr::str_c("all_data = {}\n") %>%
-    stringr::str_c("all_data['D'] = D\n") %>%
-    stringr::str_c("all_data['TS']  = TS\n") %>%
-    stringr::str_c("pickle.dump(all_data, filetosave,protocol = 2)\n") %>%
-    stringr::str_c("filetosave.close()")
+    #Python
+    pyfile <- "import lipd\n" %>%
+      stringr::str_c("import pickle\n") %>%
+      stringr::str_c("D = lipd.readLipd('",lpdtmp,"/')\n") %>%
+      stringr::str_c("TS = lipd.extractTs(D)\n") %>%
+      stringr::str_c("filetosave = open('",file.path(webDirectory,project,projVersion,stringr::str_c(project,projVersion,".pkl'")),",'wb')\n") %>%
+      stringr::str_c("all_data = {}\n") %>%
+      stringr::str_c("all_data['D'] = D\n") %>%
+      stringr::str_c("all_data['TS']  = TS\n") %>%
+      stringr::str_c("pickle.dump(all_data, filetosave,protocol = 2)\n") %>%
+      stringr::str_c("filetosave.close()")
 
-  #write the file
-  readr::write_file(pyfile,path = file.path(webDirectory,project,projVersion,"createSerialization.py"))
+    #write the file
+    readr::write_file(pyfile,path = file.path(webDirectory,project,projVersion,"createSerialization.py"))
 
-  #run the file
-  try(system(stringr::str_c(python3Path, " ",file.path(webDirectory,project,projVersion,"createSerialization.py"))))
-
+    #run the file
+    try(system(stringr::str_c(python3Path, " ",file.path(webDirectory,project,projVersion,"createSerialization.py"))))
+  }
 }
 
-
+updateCompilationMetadata <- function(ts,webDirectory = "~/Dropbox/lipdverse/html/"){
+  #update compilation metadata
+  compMd <- getAllCompilationsAndVersions(ts)
+  jsonMeta <- jsonlite::toJSON(compMd,pretty = TRUE,auto_unbox = TRUE)
+  write(jsonMeta, file=file.path(webDirectory,"lipdverse","compilationMetadata.json"))
+  upCmd <- glue::glue('rsync -v {file.path(webDirectory,"lipdverse","*")} npm4@linux.cefns.nau.edu:/www/cefns.nau.edu/seses/lipdverse/lipdverse')
+  system(upCmd)
+}
+#

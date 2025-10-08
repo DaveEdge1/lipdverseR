@@ -940,17 +940,17 @@ createQCdataFrame <- function(sTS,
     for(t in toRep){
       allYear[[t]] <- convertBP2AD(allAge[[t]])
     }
-
-    #has ages
-    nUniqueAges <- try(pullTsVariable(fsTS,"nUniqueAges"))
-    if(is(nUniqueAges,"try-error")){
-      nUniqueAges <- matrix(0,nrow = length(fsTS) )
-    }
-
-    hasChron <- as.numeric(nUniqueAges>0)
-    fsTS <- pushTsVariable(fsTS,"hasChron",hasChron,createNew = TRUE)
-
-    #has depth
+#
+#     #has ages
+#     nUniqueAges <- try(pullTsVariable(fsTS,"nUniqueAges"))
+#     if(is(nUniqueAges,"try-error")){
+#       nUniqueAges <- matrix(0,nrow = length(fsTS) )
+#     }
+#
+#     hasChron <- as.numeric(nUniqueAges>0)
+#     fsTS <- pushTsVariable(fsTS,"hasChron",hasChron,createNew = TRUE)
+#
+#     #has depth
 
 
     minYear <- sapply(allYear,min,na.rm=TRUE)
@@ -1105,7 +1105,7 @@ createNewQCSheet <- function(qcdf,qcName){
 #'
 #' @export
 #' @import readr googlesheets4 lubridate dplyr googledrive
-createNewProject <- function(templateID = "1JEm791Nhd4fUuyqece51CSlbR2A2I-pf8B0kFgwynug",project = "newProject", versionMetaId = "1OHD7PXEQ_5Lq6GxtzYvPA76bpQvN1_eYoFR0X80FIrY",googEmail = "nick.mckay2@gmail.com"){
+createNewProject <- function(templateID = "17XaSH1MNCtBI6ftEnTOHgy9C6mtXvYpR7JCNUNT-vI8",project = "newProject", versionMetaId = "1OHD7PXEQ_5Lq6GxtzYvPA76bpQvN1_eYoFR0X80FIrY",googEmail = "nick.mckay2@gmail.com"){
   #authorize google
   googlesheets4::gs4_auth(email = googEmail,cache = ".secret")
   googledrive::drive_auth(email = googEmail,cache = ".secret")
@@ -1135,7 +1135,7 @@ createNewProject <- function(templateID = "1JEm791Nhd4fUuyqece51CSlbR2A2I-pf8B0k
   nvdf <- dplyr::bind_rows(versionDf,newRow)
   #readr::write_csv(nvdf,path = file.path(tempdir(),"versTemp.csv"))
   #googledrive::drive_update(media = file.path(tempdir(),"versTemp.csv"),file = googledrive::as_id(versionMetaId),name = "lipdverse versioning spreadsheet")
-  googlesheets4::write_sheet(nvdf,ss = versionMetaId,sheet = "versioning")
+  googlesheets4::write_sheet(nvdf,ss = versionMetaId,sheet = 1)
 
   #copy the template file
   #template <- getGoogleQCSheet(templateID)
@@ -1154,6 +1154,49 @@ createNewProject <- function(templateID = "1JEm791Nhd4fUuyqece51CSlbR2A2I-pf8B0k
 
   return(dplyr::bind_rows(newQc,newLastUpdate))
 
+
+}
+
+updateDatasetsInCompilation <- function(qcId,databaseRef = NA,dsns = NA,dsids = NA){
+
+  if(all(!is.na(dsns)) & all(!is.na(dsids))){
+    stop("both dsns and dsids are included, pick one")
+  }
+  if(all(is.na(dsns)) & all(is.na(dsids))){
+    stop("you must include either the dsns or dsids to be included, pick one")
+  }
+
+  if(all(is.na(databaseRef))){
+    D <- loadLipdverseDatabase()
+    databaseRef <- createDatabaseReference(D)
+    databaseRef <<- databaseRef
+  }
+
+  dsic <- data.frame(dsn = databaseRef$dataSetName,dsid = databaseRef$datasetId, inComp = FALSE,instructions = "")
+
+  dsic$instructions[1] <- "Any datasets marked as FALSE will not be considered for the update, NA or TRUE will be considered."
+
+  if(all(!is.na(dsns))){
+    good <- which(dsic$dsn %in% dsns)
+    if(length(good) > 0){
+      dsic$inComp[good] <- TRUE
+      message(glue("Setting datasetsInCompilation tab to have {length(good)} marked datasets."))
+    }else{
+      stop("no matches found")
+    }
+  }
+
+  if(all(!is.na(dsids))){
+    good <- which(dsic$dsid %in% dsids)
+    if(length(good) > 0){
+      dsic$inComp[good] <- TRUE
+      message(glue("Setting datasetsInCompilation tab to have {length(good)} marked datasets."))
+    }else{
+      stop("no matches found")
+    }
+  }
+
+  write_sheet_retry(dsic,qcId,sheet = "datasetsInCompilation")
 
 }
 
