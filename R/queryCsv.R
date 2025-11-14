@@ -296,12 +296,12 @@ updateSqlQuery <- function(queryTable){
     # Update dataSetQuery table (dataset-level aggregation)
     print("Writing to dataSetQuery table...")
     RMySQL::dbWriteTable(mysqlconnection, "dataSetQuery", df1, overwrite=TRUE)
-    print("  ✓ dataSetQuery updated")
+    print("dataSetQuery updated")
 
     # Update query table (time-series level)
     print("Writing to query table...")
     RMySQL::dbWriteTable(mysqlconnection, "query", queryTable_clean, overwrite=TRUE)
-    print("  ✓ query updated")
+    print("query updated")
 
     # Verify the updates
     print("Verifying updates...")
@@ -314,24 +314,8 @@ updateSqlQuery <- function(queryTable){
     query_count <- RMySQL::dbGetQuery(mysqlconnection, "SELECT COUNT(*) as count FROM query")
     print(paste("  query now has", query_count$count, "rows"))
 
-    # Check Pages2kTemperature versions in query table
-    pages2k_check <- RMySQL::dbGetQuery(mysqlconnection,
-      "SELECT paleoData_mostRecentCompilations, COUNT(*) as count
-       FROM query
-       WHERE paleoData_mostRecentCompilations LIKE '%Pages2kTemperature%'
-       GROUP BY paleoData_mostRecentCompilations
-       ORDER BY paleoData_mostRecentCompilations")
-
-    if(nrow(pages2k_check) > 0) {
-      print("  Pages2kTemperature versions in query table:")
-      for(i in 1:nrow(pages2k_check)) {
-        print(paste("    ", pages2k_check$paleoData_mostRecentCompilations[i], ":",
-                    pages2k_check$count[i], "records"))
-      }
-    }
-
     # Close connection
     RMySQL::dbDisconnect(mysqlconnection)
 
-    print("✓ Database update complete!")
+    print("Database update complete!")
 }
