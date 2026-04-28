@@ -220,7 +220,7 @@ datasetIDcollapse <- function(x){stringr::str_remove(paste0(na.omit(unique(x)), 
 
 
 
-updateSqlQuery <- function(queryTable){
+updateSqlQuery <- function(queryTable, connections = NULL){
 
     # ========== EXISTING CODE: Create dataset-level summary ==========
     df1 <- queryTable |>
@@ -246,8 +246,15 @@ updateSqlQuery <- function(queryTable){
     points <- data.frame(df1$geo_longitude, df1$geo_latitude)
     pts <- sf::st_as_sf(points, coords=1:2, crs=4326)
 
-    ## Find which points fall over land
-    ii <- !is.na(as.numeric(sf::st_intersects(pts, spData::world)))
+    ## Find which points fall over land.
+    ## sf::st_intersects() returns an sgbp object - a list of integer
+    ## vectors, one per point, listing the polygon indices each point
+    ## intersects. lengths(sgbp) > 0 is the idiomatic test for "intersects
+    ## at least one polygon". The previous `as.numeric(sgbp)` coercion did
+    ## not yield one number per point (as.numeric on a list-of-lists is
+    ## unreliable), so `!is.na(...)` came back FALSE for every record and
+    ## the resulting isTerrestrial column was uniformly FALSE.
+    ii <- lengths(sf::st_intersects(pts, spData::world)) > 0
 
     ##Add column for isTerrestrial
     df1 <- cbind.data.frame(df1, isTerrestrial=ii)
@@ -283,39 +290,62 @@ updateSqlQuery <- function(queryTable){
     queryTable_clean[queryTable_clean == "NA"] <- NA
 
     # ========== DATABASE CONNECTION AND UPDATES ==========
-    #connection info
-    conInf <- readr::read_tsv("sql.secret",col_names = FALSE,col_types = "c")
+    # If the caller did not supply any connections, fall back to the
+    # legacy behavior: read sql.secret from the working directory and
+    # connect to the historical lipdverse host. This preserves backward
+    # compatibility for existing pipelines.
+    owns_connections <- is.null(connections)
+    if (owns_connections) {
+      conInf <- readr::read_tsv("sql.secret", col_names = FALSE, col_types = "c")
+      connections <- list(RMySQL::dbConnect(
+        RMySQL::MySQL(),
+        dbname   = 'lipdverse',
+        host     = '143.198.98.66',
+        port     = 3306,
+        user     = conInf$X1[[1]],
+        password = conInf$X1[[2]]
+      ))
+    } else if (inherits(connections, "DBIConnection")) {
+      # Allow callers to pass a single connection without wrapping it.
+      connections <- list(connections)
+    }
 
-    mysqlconnection = RMySQL::dbConnect(RMySQL::MySQL(),
-                                        dbname='lipdverse',
-                                        host='143.198.98.66',
-                                        port=3306,
-                                        user=conInf$X1[[1]],
-                                        password=conInf$X1[[2]])
+    for (i in seq_along(connections)) {
+      con <- connections[[i]]
 
-    # Update dataSetQuery table (dataset-level aggregation)
-    print("Writing to dataSetQuery table...")
-    RMySQL::dbWriteTable(mysqlconnection, "dataSetQuery", df1, overwrite=TRUE)
-    print("dataSetQuery updated")
+      # Best-effort label for logging - DBI::dbGetInfo() returns
+      # connection metadata that varies by driver, so fall back to a
+      # generic label if anything goes wrong.
+      target_label <- tryCatch({
+        info <- DBI::dbGetInfo(con)
+        paste0(info$user, "@", info$host, ":", info$port, "/", info$dbname)
+      }, error = function(e) paste0("connection ", i))
+      print(paste0("Updating ", target_label, "..."))
 
-    # Update query table (time-series level)
-    print("Writing to query table...")
-    RMySQL::dbWriteTable(mysqlconnection, "query", queryTable_clean, overwrite=TRUE)
-    print("query updated")
+      # Update dataSetQuery table (dataset-level aggregation)
+      print("Writing to dataSetQuery table...")
+      RMySQL::dbWriteTable(con, "dataSetQuery", df1, overwrite = TRUE)
+      print("dataSetQuery updated")
 
-    # Verify the updates
-    print("Verifying updates...")
+      # Update query table (time-series level)
+      print("Writing to query table...")
+      RMySQL::dbWriteTable(con, "query", queryTable_clean, overwrite = TRUE)
+      print("query updated")
 
-    # Check dataSetQuery count
-    dataset_count <- DBI::dbGetQuery(mysqlconnection, "SELECT COUNT(*) as count FROM dataSetQuery")
-    print(paste("  dataSetQuery now has", dataset_count$count, "rows"))
+      # Verify the updates
+      print("Verifying updates...")
+      dataset_count <- DBI::dbGetQuery(con, "SELECT COUNT(*) as count FROM dataSetQuery")
+      print(paste("  dataSetQuery now has", dataset_count$count, "rows"))
+      query_count <- DBI::dbGetQuery(con, "SELECT COUNT(*) as count FROM query")
+      print(paste("  query now has", query_count$count, "rows"))
 
-    # Check query count
-    query_count <- DBI::dbGetQuery(mysqlconnection, "SELECT COUNT(*) as count FROM query")
-    print(paste("  query now has", query_count$count, "rows"))
-
-    # Close connection
-    RMySQL::dbDisconnect(mysqlconnection)
+      # Only disconnect connections this function created. Caller-supplied
+      # connections remain the caller's responsibility (they may want to
+      # reuse them for further work).
+      if (owns_connections) {
+        RMySQL::dbDisconnect(con)
+      }
+    }
 
     print("Database update complete!")
 }
