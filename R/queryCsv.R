@@ -220,6 +220,16 @@ datasetIDcollapse <- function(x){stringr::str_remove(paste0(na.omit(unique(x)), 
 
 
 
+#' Update the lipdverse MySQL `dataSetQuery` and `query` tables
+#'
+#' @param queryTable a time-series-level data frame (one row per TSID),
+#'   typically from [createQueryCsv()] or read directly from
+#'   `lipdverseQuery.csv`.
+#' @param connections optional named list of DBI connections to write to.
+#'   When NULL, the function reads `sql.secret` from the working directory
+#'   and connects to the legacy lipdverse host.
+#'
+#' @export
 updateSqlQuery <- function(queryTable, connections = NULL){
 
     # ========== EXISTING CODE: Create dataset-level summary ==========
